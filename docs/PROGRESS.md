@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal counter workflows support versioned schedules, optional editable counter starter templates, detailed lifecycle/applicability inspection, transactional same-day progress and explicit failed/excused resolution actions, bounded prior-date recovery, effective day-status interpretation, read-only multi-habit day rosters, date-range history and recoverable-deficit queries, and Riverpod dependency providers, but habit tracking UI and historical correction are not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal counter workflows support versioned schedules, configuration/timeline and audit trail readers, optional editable counter starter templates, detailed lifecycle/applicability inspection and semantic lifecycle actions, transactional same-day progress and explicit failed/excused resolution actions, bounded prior-date recovery, effective day-status interpretation, read-only multi-habit day rosters, date-range history/summary/overview and recoverable-deficit queries, and Riverpod dependency providers, but habit tracking UI and historical correction are not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 10, including settings, habit identity, versioned counter targets and schedules, optional editable counter starter templates, audit, counter occurrences/events, explicit resolutions, immutable counter recoveries, transactional current-day counter action service, effective day-status interpretation, read-only multi-habit day rosters, date-range history and recoverable-deficit queries, detailed lifecycle/applicability readers and Riverpod service providers; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 10, including settings, habit identity, versioned counter targets and schedules, configuration/timeline and five-stream audit readers, optional editable counter starter templates, counter occurrences/events, explicit resolutions, immutable counter recoveries, transactional current-day counter and lifecycle action services, effective day-status interpretation, read-only multi-habit day rosters, date-range history/summary/overview and recoverable-deficit queries, detailed lifecycle/applicability readers and Riverpod service providers; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -238,10 +238,38 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - Reran `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && git status --short"`: formatting unchanged (51 files), analysis passed and all 100 tests passed.
 - Isolated databases were used across all tests; Android migration and integration tests were not run. No UI, historical correction or production data was added.
 
+### Milestone 1: counter configuration and version-timeline reader
+
+- At session start `git status --short` reported a clean working tree.
+- Added `CounterVersionSnapshot`, `CounterHabitConfiguration` and `CounterConfigurationReader` (`read`, `readAll`) in `lib/features/habits/data/counter_configuration_reader.dart`, partitioning versions into `priorVersions`, `effectiveVersion` and `futureVersions` relative to `asOfDate` alongside `HabitApplicabilityDetail`, `effectiveLifecycle` and `lifecycleHistory` in one read transaction without guessing missing legacy targets or schedules.
+- Added 2 isolated database tests in `test/counter_configuration_reader_test.dart` covering pre-start, current and future version transitions, paused lifecycle state, and unconfigured legacy versions.
+
+### Milestone 1: read-only counter audit trail reader
+
+- Added `CounterAuditReader` and typed audit models in `lib/features/habits/data/counter_audit_reader.dart`, loading `habit_version_audit`, `habit_lifecycle_events`, `habit_counter_event_audit`, `habit_counter_resolutions` and `habit_counter_recoveries` for a habit in one read transaction without inventing audit entries for legacy un-audited event rows.
+- Added `test/counter_audit_reader_test.dart` verifying all five audit streams across creation, future version scheduling, progress logging, failure resolution, recovery, lifecycle pause, un-audited legacy events and disk database close/reopen.
+
+### Milestone 1: semantic counter lifecycle action service
+
+- Added `CounterLifecycleActionService` (`pause`, `resume`, `archive`, `softDelete`, `restore`) in `lib/features/habits/data/counter_lifecycle_action_service.dart`, enforcing semantic source-state preconditions inside one transaction and returning the updated `CounterHabitConfiguration` while preserving historical occurrences and progress.
+- Added `test/counter_lifecycle_action_service_test.dart` covering valid transitions, rejection of mismatched semantic actions (such as `resume` from `archived` or `restore` from `paused`), rejection of same-day retroactive occurrence invalidation, and historical progress preservation.
+
+### Milestone 1: pure counter date-range summary calculation
+
+- Added `CounterRangeSummary` in `lib/features/habits/domain/counter_range_summary.dart`, aggregating per-status counts across a date range, splitting `pendingDays` into missing-occurrence versus recorded-zero, excluding `conflict` rows from valid quantity totals, and keeping `recordedQuantityTotal`, `recoveredQuantityTotal` and `remainingDeficitTotal` separate with 64-bit overflow protection.
+- Added 2 pure domain tests in `test/counter_range_summary_test.dart` covering empty/no-applicable ranges and a 10-day mixed fixture exercising all `CounterDayEffectiveStatus` values.
+
+### Milestone 1: counter habit overview reader and provider wiring
+
+- Added `CounterHabitOverview` and `CounterHabitOverviewReader` in `lib/features/habits/data/counter_habit_overview_reader.dart`, composing configuration, as-of day evaluation, date-range history, `CounterRangeSummary` and recoverable deficits in one read transaction.
+- Wired `counterConfigurationReaderProvider`, `counterAuditReaderProvider`, `counterLifecycleActionServiceProvider` and `counterHabitOverviewReaderProvider` in `lib/features/habits/application/counter_habit_providers.dart`, and added `test/counter_habit_overview_reader_test.dart`.
+- `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && git status --short"`: formatting completed (61 files), analysis passed and all 107 tests passed.
+- Isolated databases were used across all tests; Android migration and integration tests were not run. No UI, historical correction or production data was added.
+
 ## Limitations
 
 Database, occurrence data, lifecycle reasons, resolution reasons, recovery notes and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Counter logging, explicit resolution and bounded recovery are internal and restricted to the current local date (recovering prior failed dates); changing a resolution, recovery or historical event requires a future correction workflow. Non-counter tracking types (boolean, duration, checklist, avoidance, measurement, time/range), notifications and user-facing habit UI are not implemented. Raw SQL can bypass writer checks and modify event records or insert contradictory recovery rows (which `CounterDayReader.evaluate` surfaces as `conflict`). Immutable lifecycle, resolution and recovery triggers require an explicit future privacy-deletion/correction design. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Implement a read-only counter habit configuration and version-timeline reader that returns a habit's current/effective version, counter target, schedule, lifecycle state/history and scheduled future versions in one transaction without mutating data or inferring defaults. Do not add UI.
+Implement a read-only multi-habit counter dashboard summary reader that combines the requested date's counter roster with each active habit's prior recoverable deficits and lifecycle/applicability details in one transaction without creating occurrences or inferring failure. Do not add UI.

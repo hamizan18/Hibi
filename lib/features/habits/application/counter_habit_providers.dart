@@ -2,10 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../data/counter_audit_reader.dart';
+import '../data/counter_configuration_reader.dart';
 import '../data/counter_day_reader.dart';
 import '../data/counter_day_roster_reader.dart';
+import '../data/counter_habit_overview_reader.dart';
 import '../data/counter_habit_writer.dart';
 import '../data/counter_history_reader.dart';
+import '../data/counter_lifecycle_action_service.dart';
 import '../data/counter_occurrence_store.dart';
 import '../data/counter_progress_reader.dart';
 import '../data/counter_progress_writer.dart';
@@ -91,6 +95,26 @@ final counterTodayActionServiceProvider = Provider<CounterTodayActionService>(
     ref.watch(databaseProvider),
     ref.watch(appClockProvider),
   ),
+);
+
+final counterConfigurationReaderProvider = Provider<CounterConfigurationReader>(
+  (ref) => CounterConfigurationReader(ref.watch(databaseProvider)),
+);
+
+final counterAuditReaderProvider = Provider<CounterAuditReader>(
+  (ref) => CounterAuditReader(ref.watch(databaseProvider)),
+);
+
+final counterLifecycleActionServiceProvider =
+    Provider<CounterLifecycleActionService>(
+      (ref) => CounterLifecycleActionService(
+        ref.watch(databaseProvider),
+        ref.watch(appClockProvider),
+      ),
+    );
+
+final counterHabitOverviewReaderProvider = Provider<CounterHabitOverviewReader>(
+  (ref) => CounterHabitOverviewReader(ref.watch(databaseProvider)),
 );
 
 /// Read-only roster evaluation for any requested local date.
