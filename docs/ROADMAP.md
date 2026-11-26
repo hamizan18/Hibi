@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Internal counter workflows include versioned schedules, configuration/timeline and audit trail readers, optional editable counter starter templates, detailed lifecycle/applicability inspection and semantic lifecycle transitions, transactional same-day progress and explicit failed/excused resolution actions, bounded prior-date recovery, effective day-status interpretation, read-only multi-habit day rosters, date-range history/summary/overview and recoverable-deficit queries, and Riverpod dependency providers; operational tracking UI and historical correction workflows do not yet exist. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and its domain, persistence, recurrence, historical counter correction preview/commit, multi-type tracking engines (counter, checklist, avoidance, boolean, duration, measurement, time-of-day, range), all four optional editable starter templates and Riverpod service providers are implemented; user-facing habit UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

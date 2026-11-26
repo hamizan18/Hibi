@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 10 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 11 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -57,10 +57,24 @@ Schema version 10 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_counter_recoveries` | `note` | TEXT | NULL or user-provided note |
 | `habit_counter_recoveries` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
 | `habit_schedules` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_versions(id)`, ON DELETE RESTRICT |
-| `habit_schedules` | `recurrence` | TEXT | NOT NULL, `daily` or `weekdays` |
+| `habit_schedules` | `recurrence` | TEXT | NOT NULL: `daily`, `weekdays`, `interval`, `monthly_skip`, `monthly_last_day`, or `one_time` |
 | `habit_schedules` | `start_date` | TEXT | NOT NULL, valid ISO date; inclusive anchor |
-| `habit_schedules` | `end_exclusive` | TEXT | NULL or valid ISO date strictly after start |
-| `habit_schedules` | `weekday_mask` | INTEGER | NULL for daily; integer 1–127 for weekdays |
+| `habit_schedules` | `end_exclusive` | TEXT | NULL or valid ISO date strictly after start (exact `+1 day` for `one_time`) |
+| `habit_schedules` | `weekday_mask` | INTEGER | NULL for `daily`/`one_time`; 1–127 for `weekdays`; $>0$ interval days for `interval`; 1–31 day-of-month for monthly |
+| `habit_counter_correction_audit` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank; immutable counter correction preimage/postimage audit |
+| `habit_version_metadata` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_versions(id)`; category, symbol, priority, privacy, ordering |
+| `habit_checklist_items` | `id` | TEXT | NOT NULL, PRIMARY KEY; independent checklist items per `habit_version_id` |
+| `habit_checklist_occurrences` | `id` | TEXT | NOT NULL, PRIMARY KEY; unique `(habit_id, local_date)` checklist occurrence |
+| `habit_checklist_item_logs` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable per-item `completed`, `failed`, or `excused` log |
+| `habit_checklist_item_recoveries` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable prior-date recovery for a failed checklist item |
+| `habit_avoidance_targets` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY; non-negative integer `max_incidents` |
+| `habit_avoidance_occurrences` | `id` | TEXT | NOT NULL, PRIMARY KEY; unique `(habit_id, local_date)` avoidance occurrence |
+| `habit_avoidance_incidents` | `id` | TEXT | NOT NULL, PRIMARY KEY; multiple incident entries per avoidance occurrence |
+| `habit_avoidance_resolutions` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable `confirmed_completed`, `failed`, or `excused` decision |
+| `habit_typed_targets` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY; validated `boolean`, `duration`, `measurement`, `time_of_day`, or `range` target |
+| `habit_typed_occurrences` | `id` | TEXT | NOT NULL, PRIMARY KEY; unique `(habit_id, local_date)` occurrence for typed habits |
+| `habit_duration_events` | `id` | TEXT | NOT NULL, PRIMARY KEY; positive integer `duration_seconds` (`manual` or `timer`) |
+| `habit_typed_logs` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable result log for boolean, duration, measurement, time_of_day, or range |
 | `habit_lifecycle_events` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
 | `habit_lifecycle_events` | `habit_id` | TEXT | NOT NULL, foreign key to `habits(id)`, ON DELETE RESTRICT |
 | `habit_lifecycle_events` | `effective_date` | TEXT | NOT NULL, valid ISO date; unique per habit |
@@ -69,7 +83,7 @@ Schema version 10 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_lifecycle_events` | `reason` | TEXT | NULL or local user-provided reason |
 | `habit_lifecycle_events` | `created_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
 
-The settings and identity primary keys and per-habit revision/occurrence/lifecycle-date uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`; `habit_counter_recoveries_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 9 to 10 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
+The settings and identity primary keys and per-habit revision/occurrence/lifecycle-date uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`; `habit_counter_recoveries_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`; `habit_counter_correction_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 10 to 11 add missing tables and upgrade `habit_schedules` transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
 
 Counter targets are linked to a specific habit version; the row's presence identifies a counter configuration. Counts use exact positive whole units in the signed SQLite 64-bit integer range (1 to 9223372036854775807), without fractions or floating point; decimal measurements need a separate precision design. `CounterTarget` additionally trims whitespace and rejects blank units. Existing versions without target rows remain explicitly unconfigured: migration never guesses a type, target or unit.
 

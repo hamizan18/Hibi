@@ -14,6 +14,8 @@ import 'package:hibi/features/habits/domain/habit_schedule.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'test_schema_downgrade.dart';
+
 class FixedClock implements AppClock {
   @override
   DateTime now() => DateTime(2026, 11, 26, 12);
@@ -215,6 +217,7 @@ void main() {
       ).append(eventId: 'e', occurrenceId: 'o', quantity: 2);
       await original.close();
       final legacy = sqlite3.open(file.path);
+      dropV11Tables(legacy);
       legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute('PRAGMA user_version = 8');
@@ -267,6 +270,7 @@ void main() {
       ).append(eventId: 'e', occurrenceId: 'o', quantity: 2);
       await original.close();
       final legacy = sqlite3.open(file.path);
+      dropV11Tables(legacy);
       legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute(

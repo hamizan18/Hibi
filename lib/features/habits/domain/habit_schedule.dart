@@ -35,6 +35,10 @@ final class LocalDate implements Comparable<LocalDate> {
   }
 }
 
+/// Number of days in a Gregorian calendar month.
+int daysInGregorianMonth(int year, int month) =>
+    DateTime.utc(year, month + 1, 0).day;
+
 /// A recurrence only; lifecycle and habit-version applicability are separate.
 sealed class HabitSchedule {
   HabitSchedule({required this.start, this.endExclusive}) {
@@ -43,7 +47,7 @@ sealed class HabitSchedule {
     }
   }
 
-  /// Inclusive recurrence anchor, even if it is not a selected weekday.
+  /// Inclusive recurrence anchor, even if it is not a selected weekday/day.
   final LocalDate start;
 
   /// Optional exclusive recurrence end.
@@ -84,4 +88,70 @@ final class WeekdaySchedule extends HabitSchedule {
 
   @override
   bool _matches(LocalDate date) => weekdays.contains(date.weekday);
+}
+
+/// Anchored custom day interval (e.g. every 2 days, or every 7 days for weekly).
+final class IntervalSchedule extends HabitSchedule {
+  IntervalSchedule({
+    required super.start,
+    super.endExclusive,
+    required this.everyDays,
+  }) {
+    if (everyDays <= 0) {
+      throw RangeError.value(everyDays, 'everyDays', 'Must be at least 1 day');
+    }
+  }
+
+  final int everyDays;
+
+  @override
+  bool _matches(LocalDate date) {
+    final anchorUtc = DateTime.utc(start.year, start.month, start.day);
+    final targetUtc = DateTime.utc(date.year, date.month, date.day);
+    final elapsedDays = targetUtc.difference(anchorUtc).inDays;
+    return elapsedDays >= 0 && elapsedDays % everyDays == 0;
+  }
+}
+
+/// Monthly day-of-month recurrence; nonexistent dates skip by default unless
+/// [lastDayFallback] is enabled.
+final class MonthlyDaySchedule extends HabitSchedule {
+  MonthlyDaySchedule({
+    required super.start,
+    super.endExclusive,
+    required this.dayOfMonth,
+    this.lastDayFallback = false,
+  }) {
+    if (dayOfMonth < 1 || dayOfMonth > 31) {
+      throw RangeError.range(dayOfMonth, 1, 31, 'dayOfMonth');
+    }
+  }
+
+  final int dayOfMonth;
+  final bool lastDayFallback;
+
+  @override
+  bool _matches(LocalDate date) {
+    final maxDay = daysInGregorianMonth(date.year, date.month);
+    if (dayOfMonth <= maxDay) {
+      return date.day == dayOfMonth;
+    }
+    return lastDayFallback && date.day == maxDay;
+  }
+}
+
+/// Single-day one-time schedule on [date].
+final class OneTimeSchedule extends HabitSchedule {
+  OneTimeSchedule({required LocalDate date})
+    : super(start: date, endExclusive: _dayAfter(date));
+
+  LocalDate get date => start;
+
+  @override
+  bool _matches(LocalDate candidate) => candidate.compareTo(start) == 0;
+}
+
+LocalDate _dayAfter(LocalDate date) {
+  final next = DateTime.utc(date.year, date.month, date.day + 1);
+  return LocalDate(next.year, next.month, next.day);
 }

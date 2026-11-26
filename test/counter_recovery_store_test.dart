@@ -16,6 +16,8 @@ import 'package:hibi/features/habits/domain/habit_schedule.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'test_schema_downgrade.dart';
+
 class MutableClock implements AppClock {
   MutableClock(this.current);
   DateTime current;
@@ -227,6 +229,7 @@ void main() {
       await original.close();
 
       final legacy = sqlite3.open(file.path);
+      dropV11Tables(legacy);
       legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('PRAGMA user_version = 9');
       legacy.close();
@@ -235,7 +238,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
       expect(
         (await CounterResolutionReader(migrated).find('o'))!.state,
@@ -273,6 +276,7 @@ void main() {
     await original.close();
 
     final legacy = sqlite3.open(file.path);
+    dropV11Tables(legacy);
     legacy.execute('DROP TABLE habit_counter_recoveries');
     legacy.execute(
       "CREATE TRIGGER habit_counter_recoveries_no_update BEFORE UPDATE ON habit_counter_events BEGIN SELECT RAISE(ABORT, 'collision'); END",

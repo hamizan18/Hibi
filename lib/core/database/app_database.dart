@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -46,10 +46,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createCounterEventAuditSchema();
       await _createCounterResolutionSchema();
       await _createCounterRecoverySchema();
+      await _createV11Schemas();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 9 || to != 10) {
+      if (from < 1 || from > 10 || to != 11) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -57,11 +58,16 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 2) await _createCounterTargetSchema();
         if (from <= 3) await _createHabitAuditSchema();
         if (from <= 4) await _createOccurrenceSchema();
-        if (from <= 5) await _createScheduleSchema();
+        if (from <= 5) {
+          await _createScheduleSchema();
+        } else {
+          await _upgradeScheduleSchemaToV11();
+        }
         if (from <= 6) await _createLifecycleSchema();
         if (from <= 7) await _createCounterEventAuditSchema();
         if (from <= 8) await _createCounterResolutionSchema();
-        await _createCounterRecoverySchema();
+        if (from <= 9) await _createCounterRecoverySchema();
+        await _createV11Schemas();
       });
     },
     beforeOpen: (details) async {
@@ -184,18 +190,7 @@ class AppDatabase extends GeneratedDatabase {
         SELECT RAISE(ABORT, 'occurrence does not match an applicable counter version');
       END
     ''');
-    await customStatement('''
-      CREATE TRIGGER habit_occurrences_protect_interpretation
-      BEFORE UPDATE OF id, habit_id, habit_version_id, local_date, target_count, unit
-      ON habit_occurrences
-      WHEN NEW.id IS NOT OLD.id OR NEW.habit_id IS NOT OLD.habit_id
-        OR NEW.habit_version_id IS NOT OLD.habit_version_id
-        OR NEW.local_date IS NOT OLD.local_date
-        OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit
-      BEGIN
-        SELECT RAISE(ABORT, 'occurrence correction workflow required');
-      END
-    ''');
+    await createCounterTargetAndOccurrenceProtectionTriggers();
     await customStatement('''
       CREATE TRIGGER habit_versions_protect_occurrences
       BEFORE UPDATE OF id, habit_id, name, effective_start, effective_end ON habit_versions
@@ -207,16 +202,6 @@ class AppDatabase extends GeneratedDatabase {
       )
       BEGIN
         SELECT RAISE(ABORT, 'version change would alter existing occurrences');
-      END
-    ''');
-    await customStatement('''
-      CREATE TRIGGER habit_counter_targets_protect_update
-      BEFORE UPDATE ON habit_counter_targets
-      WHEN EXISTS (SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id)
-        AND (NEW.habit_version_id IS NOT OLD.habit_version_id
-          OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit)
-      BEGIN
-        SELECT RAISE(ABORT, 'target correction workflow required');
       END
     ''');
     await customStatement('''
@@ -241,12 +226,48 @@ class AppDatabase extends GeneratedDatabase {
     ''');
   }
 
-  Future<void> _createScheduleSchema() async {
+  /// Creates the triggers guarding counter target and occurrence snapshots
+  /// against unconfirmed direct updates.
+  Future<void> createCounterTargetAndOccurrenceProtectionTriggers() async {
+    await customStatement('''
+      CREATE TRIGGER habit_occurrences_protect_interpretation
+      BEFORE UPDATE OF id, habit_id, habit_version_id, local_date, target_count, unit
+      ON habit_occurrences
+      WHEN NEW.id IS NOT OLD.id OR NEW.habit_id IS NOT OLD.habit_id
+        OR NEW.habit_version_id IS NOT OLD.habit_version_id
+        OR NEW.local_date IS NOT OLD.local_date
+        OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit
+      BEGIN
+        SELECT RAISE(ABORT, 'occurrence correction workflow required');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_counter_targets_protect_update
+      BEFORE UPDATE ON habit_counter_targets
+      WHEN EXISTS (SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id)
+        AND (NEW.habit_version_id IS NOT OLD.habit_version_id
+          OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit)
+      BEGIN
+        SELECT RAISE(ABORT, 'target correction workflow required');
+      END
+    ''');
+  }
+
+  Future<void> _createScheduleTableOnly() async {
     await customStatement('''
       CREATE TABLE habit_schedules (
         habit_version_id TEXT NOT NULL PRIMARY KEY
           REFERENCES habit_versions(id) ON DELETE RESTRICT,
-        recurrence TEXT NOT NULL CHECK (recurrence IN ('daily', 'weekdays')),
+        recurrence TEXT NOT NULL CHECK (
+          recurrence IN (
+            'daily',
+            'weekdays',
+            'interval',
+            'monthly_skip',
+            'monthly_last_day',
+            'one_time'
+          )
+        ),
         start_date TEXT NOT NULL CHECK (
           start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
           AND substr(start_date, 1, 4) >= '0001'
@@ -263,11 +284,25 @@ class AppDatabase extends GeneratedDatabase {
         weekday_mask INTEGER,
         CHECK (
           (recurrence = 'daily' AND weekday_mask IS NULL)
-          OR (recurrence = 'weekdays' AND typeof(weekday_mask) = 'integer'
-              AND weekday_mask BETWEEN 1 AND 127)
+          OR (recurrence = 'weekdays'
+            AND typeof(weekday_mask) = 'integer'
+            AND weekday_mask BETWEEN 1 AND 127)
+          OR (recurrence = 'interval'
+            AND typeof(weekday_mask) = 'integer'
+            AND weekday_mask > 0)
+          OR (recurrence IN ('monthly_skip', 'monthly_last_day')
+            AND typeof(weekday_mask) = 'integer'
+            AND weekday_mask BETWEEN 1 AND 31)
+          OR (recurrence = 'one_time'
+            AND weekday_mask IS NULL
+            AND end_exclusive IS NOT NULL
+            AND date(start_date, '+1 day') IS end_exclusive)
         )
       )
     ''');
+  }
+
+  Future<void> _createScheduleTriggers() async {
     await customStatement('''
       CREATE TRIGGER habit_schedules_protect_insert
       BEFORE INSERT ON habit_schedules
@@ -300,6 +335,35 @@ class AppDatabase extends GeneratedDatabase {
         SELECT RAISE(ABORT, 'schedule correction workflow required');
       END
     ''');
+  }
+
+  Future<void> _createScheduleSchema() async {
+    await _createScheduleTableOnly();
+    await _createScheduleTriggers();
+  }
+
+  Future<void> _upgradeScheduleSchemaToV11() async {
+    await customStatement(
+      'DROP TRIGGER IF EXISTS habit_schedules_protect_insert',
+    );
+    await customStatement(
+      'DROP TRIGGER IF EXISTS habit_schedules_protect_update',
+    );
+    await customStatement(
+      'DROP TRIGGER IF EXISTS habit_schedules_protect_delete',
+    );
+    await customStatement(
+      'ALTER TABLE habit_schedules RENAME TO habit_schedules_legacy_v10',
+    );
+    await _createScheduleTableOnly();
+    await customStatement('''
+      INSERT INTO habit_schedules
+        (habit_version_id, recurrence, start_date, end_exclusive, weekday_mask)
+      SELECT habit_version_id, recurrence, start_date, end_exclusive, weekday_mask
+      FROM habit_schedules_legacy_v10
+    ''');
+    await customStatement('DROP TABLE habit_schedules_legacy_v10');
+    await _createScheduleTriggers();
   }
 
   Future<void> _createLifecycleSchema() async {
@@ -411,6 +475,342 @@ class AppDatabase extends GeneratedDatabase {
         BEFORE $operation ON habit_counter_recoveries
         BEGIN
           SELECT RAISE(ABORT, 'recovery correction workflow required');
+        END
+      ''');
+    }
+  }
+
+  Future<void> _createV11Schemas() async {
+    // 1. Historical counter correction audit & preimages
+    await customStatement('''
+      CREATE TABLE habit_counter_correction_audit (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        effective_start TEXT NOT NULL CHECK (
+          effective_start GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(effective_start, 1, 4) >= '0001'
+          AND date(effective_start, '+0 days') IS effective_start
+        ),
+        effective_end TEXT CHECK (
+          effective_end IS NULL OR (
+            effective_end GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+            AND substr(effective_end, 1, 4) >= '0001'
+            AND date(effective_end, '+0 days') IS effective_end
+            AND effective_end > effective_start
+          )
+        ),
+        previous_target_count INTEGER NOT NULL CHECK (
+          typeof(previous_target_count) = 'integer' AND previous_target_count > 0
+        ),
+        updated_target_count INTEGER NOT NULL CHECK (
+          typeof(updated_target_count) = 'integer' AND updated_target_count > 0
+        ),
+        unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+        reason TEXT,
+        before_snapshot_json TEXT NOT NULL CHECK (length(trim(before_snapshot_json)) > 0),
+        after_snapshot_json TEXT NOT NULL CHECK (length(trim(after_snapshot_json)) > 0),
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_counter_correction_audit_by_habit_time
+      ON habit_counter_correction_audit (habit_id, occurred_at_utc_us)
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_counter_correction_audit_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_counter_correction_audit
+        BEGIN
+          SELECT RAISE(ABORT, 'correction audit records are immutable');
+        END
+      ''');
+    }
+
+    // 2. Version-scoped metadata (category, symbol, priority, privacy, ordering)
+    await customStatement('''
+      CREATE TABLE habit_version_metadata (
+        habit_version_id TEXT NOT NULL PRIMARY KEY
+          REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        description TEXT CHECK (description IS NULL OR length(trim(description)) > 0),
+        symbol TEXT CHECK (symbol IS NULL OR length(trim(symbol)) > 0),
+        category TEXT NOT NULL CHECK (length(trim(category)) > 0),
+        priority TEXT NOT NULL CHECK (priority IN ('critical', 'high', 'normal', 'low')),
+        is_private INTEGER NOT NULL CHECK (is_private IN (0, 1)),
+        recovery_enabled INTEGER NOT NULL CHECK (recovery_enabled IN (0, 1)),
+        include_in_score INTEGER NOT NULL CHECK (include_in_score IN (0, 1)),
+        include_in_streak INTEGER NOT NULL CHECK (include_in_streak IN (0, 1)),
+        include_in_rewards INTEGER NOT NULL CHECK (include_in_rewards IN (0, 1)),
+        display_order INTEGER NOT NULL CHECK (typeof(display_order) = 'integer')
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_version_metadata_protect_${operation.toLowerCase()}
+        BEFORE $operation ON habit_version_metadata
+        WHEN EXISTS (
+          SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'metadata correction workflow required');
+        END
+      ''');
+    }
+
+    // 3. Independent multi-checklist items, occurrences, logs and recoveries
+    await customStatement('''
+      CREATE TABLE habit_checklist_items (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        label TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        display_order INTEGER NOT NULL CHECK (typeof(display_order) = 'integer'),
+        recovery_enabled INTEGER NOT NULL CHECK (recovery_enabled IN (0, 1)),
+        UNIQUE (habit_version_id, display_order)
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_checklist_occurrences (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        UNIQUE (habit_id, local_date)
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_checklist_item_logs (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL REFERENCES habit_checklist_occurrences(id) ON DELETE RESTRICT,
+        item_id TEXT NOT NULL REFERENCES habit_checklist_items(id) ON DELETE RESTRICT,
+        state TEXT NOT NULL CHECK (state IN ('completed', 'failed', 'excused')),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer'),
+        UNIQUE (occurrence_id, item_id)
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_checklist_item_logs_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_checklist_item_logs
+        BEGIN
+          SELECT RAISE(ABORT, 'checklist log correction workflow required');
+        END
+      ''');
+    }
+    await customStatement('''
+      CREATE TABLE habit_checklist_item_recoveries (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        item_log_id TEXT NOT NULL UNIQUE REFERENCES habit_checklist_item_logs(id) ON DELETE RESTRICT,
+        occurrence_id TEXT NOT NULL REFERENCES habit_checklist_occurrences(id) ON DELETE RESTRICT,
+        item_id TEXT NOT NULL REFERENCES habit_checklist_items(id) ON DELETE RESTRICT,
+        recovery_local_date TEXT NOT NULL CHECK (
+          recovery_local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(recovery_local_date, 1, 4) >= '0001'
+          AND date(recovery_local_date, '+0 days') IS recovery_local_date
+        ),
+        note TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_checklist_item_recoveries_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_checklist_item_recoveries
+        BEGIN
+          SELECT RAISE(ABORT, 'checklist recovery correction workflow required');
+        END
+      ''');
+    }
+
+    // 4. Avoidance targets, occurrences, repeated incidents and daily resolutions
+    await customStatement('''
+      CREATE TABLE habit_avoidance_targets (
+        habit_version_id TEXT NOT NULL PRIMARY KEY
+          REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        max_incidents INTEGER NOT NULL CHECK (
+          typeof(max_incidents) = 'integer' AND max_incidents >= 0
+        )
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_avoidance_occurrences (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        max_incidents INTEGER NOT NULL CHECK (
+          typeof(max_incidents) = 'integer' AND max_incidents >= 0
+        ),
+        UNIQUE (habit_id, local_date)
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_avoidance_incidents (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL REFERENCES habit_avoidance_occurrences(id) ON DELETE RESTRICT,
+        note TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_avoidance_resolutions (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL UNIQUE REFERENCES habit_avoidance_occurrences(id) ON DELETE RESTRICT,
+        state TEXT NOT NULL CHECK (state IN ('confirmed_completed', 'failed', 'excused')),
+        incident_count_snapshot INTEGER NOT NULL CHECK (
+          typeof(incident_count_snapshot) = 'integer' AND incident_count_snapshot >= 0
+        ),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_avoidance_resolutions_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_avoidance_resolutions
+        BEGIN
+          SELECT RAISE(ABORT, 'avoidance resolution correction workflow required');
+        END
+      ''');
+    }
+
+    // 5. Typed targets & logs for boolean, duration, measurement, time_of_day and range
+    await customStatement('''
+      CREATE TABLE habit_typed_targets (
+        habit_version_id TEXT NOT NULL PRIMARY KEY
+          REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        tracking_type TEXT NOT NULL CHECK (
+          tracking_type IN ('boolean', 'duration', 'measurement', 'time_of_day', 'range')
+        ),
+        target_seconds INTEGER,
+        scaled_target INTEGER,
+        min_scaled INTEGER,
+        max_scaled INTEGER,
+        decimal_places INTEGER,
+        unit TEXT,
+        comparison_rule TEXT,
+        target_minutes_since_midnight INTEGER,
+        CHECK (
+          (tracking_type = 'boolean'
+            AND target_seconds IS NULL
+            AND scaled_target IS NULL
+            AND min_scaled IS NULL
+            AND max_scaled IS NULL
+            AND decimal_places IS NULL
+            AND unit IS NULL
+            AND comparison_rule IS NULL
+            AND target_minutes_since_midnight IS NULL)
+          OR (tracking_type = 'duration'
+            AND typeof(target_seconds) = 'integer'
+            AND target_seconds > 0
+            AND scaled_target IS NULL
+            AND min_scaled IS NULL
+            AND max_scaled IS NULL
+            AND decimal_places IS NULL
+            AND unit IS NULL
+            AND comparison_rule IS NULL
+            AND target_minutes_since_midnight IS NULL)
+          OR (tracking_type = 'measurement'
+            AND typeof(scaled_target) = 'integer'
+            AND typeof(decimal_places) = 'integer'
+            AND decimal_places BETWEEN 0 AND 6
+            AND unit IS NOT NULL
+            AND length(trim(unit)) > 0
+            AND comparison_rule IN ('at_least', 'at_most', 'exact')
+            AND target_seconds IS NULL
+            AND min_scaled IS NULL
+            AND max_scaled IS NULL
+            AND target_minutes_since_midnight IS NULL)
+          OR (tracking_type = 'time_of_day'
+            AND typeof(target_minutes_since_midnight) = 'integer'
+            AND target_minutes_since_midnight BETWEEN 0 AND 1439
+            AND comparison_rule IN ('at_or_before', 'at_or_after')
+            AND target_seconds IS NULL
+            AND scaled_target IS NULL
+            AND min_scaled IS NULL
+            AND max_scaled IS NULL
+            AND decimal_places IS NULL
+            AND unit IS NULL)
+          OR (tracking_type = 'range'
+            AND typeof(min_scaled) = 'integer'
+            AND typeof(max_scaled) = 'integer'
+            AND min_scaled <= max_scaled
+            AND typeof(decimal_places) = 'integer'
+            AND decimal_places BETWEEN 0 AND 6
+            AND unit IS NOT NULL
+            AND length(trim(unit)) > 0
+            AND target_seconds IS NULL
+            AND scaled_target IS NULL
+            AND comparison_rule IS NULL
+            AND target_minutes_since_midnight IS NULL)
+        )
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_typed_occurrences (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        tracking_type TEXT NOT NULL CHECK (
+          tracking_type IN ('boolean', 'duration', 'measurement', 'time_of_day', 'range')
+        ),
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        UNIQUE (habit_id, local_date)
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_duration_events (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL REFERENCES habit_typed_occurrences(id) ON DELETE RESTRICT,
+        duration_seconds INTEGER NOT NULL CHECK (
+          typeof(duration_seconds) = 'integer' AND duration_seconds > 0
+        ),
+        source TEXT NOT NULL CHECK (source IN ('manual', 'timer')),
+        started_at_utc_us INTEGER,
+        ended_at_utc_us INTEGER,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer'),
+        CHECK (
+          (source = 'manual' AND started_at_utc_us IS NULL AND ended_at_utc_us IS NULL)
+          OR (source = 'timer'
+            AND typeof(started_at_utc_us) = 'integer'
+            AND typeof(ended_at_utc_us) = 'integer'
+            AND ended_at_utc_us > started_at_utc_us)
+        )
+      )
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_typed_logs (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL UNIQUE REFERENCES habit_typed_occurrences(id) ON DELETE RESTRICT,
+        state TEXT NOT NULL CHECK (state IN ('completed', 'partial', 'failed', 'excused')),
+        scaled_value INTEGER,
+        minutes_since_midnight INTEGER CHECK (
+          minutes_since_midnight IS NULL
+          OR (typeof(minutes_since_midnight) = 'integer'
+            AND minutes_since_midnight BETWEEN 0 AND 1439)
+        ),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_typed_logs_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_typed_logs
+        BEGIN
+          SELECT RAISE(ABORT, 'typed log correction workflow required');
         END
       ''');
     }

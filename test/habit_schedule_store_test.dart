@@ -8,6 +8,8 @@ import 'package:hibi/features/habits/domain/habit_schedule.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'test_schema_downgrade.dart';
+
 void main() {
   test(
     'versioned schedules round-trip without altering earlier versions',
@@ -56,6 +58,58 @@ void main() {
         await HabitScheduleStore(reopened).findForVersion('unknown'),
         isNull,
       );
+    },
+  );
+
+  test(
+    'interval, monthly and one-time schedules round-trip through SQLite',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.customStatement("INSERT INTO habits VALUES ('h', 1)");
+      await db.customStatement(
+        "INSERT INTO habit_versions VALUES ('v_int', 'h', 'Interval', '2026-11-01', '2026-11-10', 1, 1), ('v_m_skip', 'h', 'MonthlySkip', '2026-11-10', '2026-11-20', 1, 2), ('v_m_last', 'h', 'MonthlyLast', '2026-11-20', '2026-11-25', 1, 3), ('v_one', 'h', 'OneTime', '2026-11-26', NULL, 1, 4)",
+      );
+      final store = HabitScheduleStore(db);
+      await store.insert(
+        'v_int',
+        IntervalSchedule(start: LocalDate(2026, 11, 1), everyDays: 4),
+      );
+      await store.insert(
+        'v_m_skip',
+        MonthlyDaySchedule(start: LocalDate(2024, 1, 1), dayOfMonth: 31),
+      );
+      await store.insert(
+        'v_m_last',
+        MonthlyDaySchedule(
+          start: LocalDate(2024, 1, 1),
+          dayOfMonth: 31,
+          lastDayFallback: true,
+        ),
+      );
+      await store.insert(
+        'v_one',
+        OneTimeSchedule(date: LocalDate(2026, 11, 26)),
+      );
+
+      final loadedInt =
+          (await store.findForVersion('v_int'))! as IntervalSchedule;
+      expect(loadedInt.everyDays, 4);
+      expect(loadedInt.appliesOn(LocalDate(2026, 11, 5)), isTrue);
+
+      final loadedSkip =
+          (await store.findForVersion('v_m_skip'))! as MonthlyDaySchedule;
+      expect(loadedSkip.dayOfMonth, 31);
+      expect(loadedSkip.lastDayFallback, isFalse);
+
+      final loadedLast =
+          (await store.findForVersion('v_m_last'))! as MonthlyDaySchedule;
+      expect(loadedLast.dayOfMonth, 31);
+      expect(loadedLast.lastDayFallback, isTrue);
+
+      final loadedOne =
+          (await store.findForVersion('v_one'))! as OneTimeSchedule;
+      expect(loadedOne.date.compareTo(LocalDate(2026, 11, 26)), 0);
     },
   );
 
@@ -145,6 +199,7 @@ void main() {
       );
       await original.close();
       final legacy = sqlite3.open(file.path);
+      dropV11Tables(legacy);
       legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute('DROP TABLE habit_counter_event_audit');
@@ -177,7 +232,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
     },
   );

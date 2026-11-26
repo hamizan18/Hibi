@@ -2,8 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../data/avoidance_habit_store.dart';
+import '../data/boolean_duration_habit_store.dart';
+import '../data/checklist_habit_store.dart';
 import '../data/counter_audit_reader.dart';
 import '../data/counter_configuration_reader.dart';
+import '../data/counter_correction_preview.dart';
+import '../data/counter_correction_writer.dart';
+import '../data/counter_dashboard_reader.dart';
 import '../data/counter_day_reader.dart';
 import '../data/counter_day_roster_reader.dart';
 import '../data/counter_habit_overview_reader.dart';
@@ -17,6 +23,9 @@ import '../data/counter_recovery_store.dart';
 import '../data/counter_resolution.dart';
 import '../data/counter_today_action_service.dart';
 import '../data/habit_lifecycle.dart';
+import '../data/habit_metadata_store.dart';
+import '../data/measurement_time_range_habit_store.dart';
+import '../data/unified_habit_registry.dart';
 import '../domain/habit_schedule.dart';
 
 final habitLifecycleStoreProvider = Provider<HabitLifecycleStore>(
@@ -32,6 +41,10 @@ final habitLifecycleReaderProvider = Provider<HabitLifecycleReader>(
 
 final habitApplicabilityReaderProvider = Provider<HabitApplicabilityReader>(
   (ref) => HabitApplicabilityReader(ref.watch(databaseProvider)),
+);
+
+final habitMetadataStoreProvider = Provider<HabitMetadataStore>(
+  (ref) => HabitMetadataStore(ref.watch(databaseProvider)),
 );
 
 final counterHabitWriterProvider = Provider<CounterHabitWriter>(
@@ -115,6 +128,58 @@ final counterLifecycleActionServiceProvider =
 
 final counterHabitOverviewReaderProvider = Provider<CounterHabitOverviewReader>(
   (ref) => CounterHabitOverviewReader(ref.watch(databaseProvider)),
+);
+
+final counterDashboardReaderProvider = Provider<CounterDashboardReader>(
+  (ref) => CounterDashboardReader(ref.watch(databaseProvider)),
+);
+
+final counterCorrectionPreviewerProvider = Provider<CounterCorrectionPreviewer>(
+  (ref) => CounterCorrectionPreviewer(
+    ref.watch(databaseProvider),
+    ref.watch(appClockProvider),
+  ),
+);
+
+final counterCorrectionWriterProvider = Provider<CounterCorrectionWriter>(
+  (ref) => CounterCorrectionWriter(
+    ref.watch(databaseProvider),
+    ref.watch(appClockProvider),
+  ),
+);
+
+final checklistHabitServiceProvider = Provider<ChecklistHabitService>(
+  (ref) => ChecklistHabitService(
+    ref.watch(databaseProvider),
+    ref.watch(appClockProvider),
+  ),
+);
+
+final avoidanceHabitServiceProvider = Provider<AvoidanceHabitService>(
+  (ref) => AvoidanceHabitService(
+    ref.watch(databaseProvider),
+    ref.watch(appClockProvider),
+  ),
+);
+
+final booleanDurationHabitServiceProvider =
+    Provider<BooleanDurationHabitService>(
+      (ref) => BooleanDurationHabitService(
+        ref.watch(databaseProvider),
+        ref.watch(appClockProvider),
+      ),
+    );
+
+final measurementTimeRangeHabitServiceProvider =
+    Provider<MeasurementTimeRangeHabitService>(
+      (ref) => MeasurementTimeRangeHabitService(
+        ref.watch(databaseProvider),
+        ref.watch(appClockProvider),
+      ),
+    );
+
+final unifiedHabitRegistryReaderProvider = Provider<UnifiedHabitRegistryReader>(
+  (ref) => UnifiedHabitRegistryReader(ref.watch(databaseProvider)),
 );
 
 /// Read-only roster evaluation for any requested local date.

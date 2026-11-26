@@ -251,14 +251,26 @@ Map<String, Object?> _scheduleValues(HabitSchedule schedule) => {
   'recurrence': switch (schedule) {
     DailySchedule() => 'daily',
     WeekdaySchedule() => 'weekdays',
+    IntervalSchedule() => 'interval',
+    MonthlyDaySchedule() => 'monthly',
+    OneTimeSchedule() => 'one_time',
   },
   'start_date': _localDateKey(schedule.start),
   'end_exclusive': schedule.endExclusive == null
       ? null
       : _localDateKey(schedule.endExclusive!),
   'weekdays': switch (schedule) {
-    DailySchedule() => null,
     WeekdaySchedule(:final weekdays) => weekdays.toList()..sort(),
+    _ => null,
+  },
+  if (schedule case IntervalSchedule(:final everyDays))
+    'interval_days': everyDays,
+  if (schedule case MonthlyDaySchedule(
+    :final dayOfMonth,
+    :final lastDayFallback,
+  )) ...{
+    'day_of_month': dayOfMonth,
+    'monthly_last_day_fallback': lastDayFallback,
   },
 };
 

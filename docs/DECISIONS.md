@@ -143,3 +143,43 @@ Context: summarizing a counter habit across a date interval must keep `pending` 
 ## ADR-036: Read-only counter habit overview reader — 2026-11-26
 
 Context: inspecting a single counter habit requires its configuration/version timeline, current-day status evaluation, date-range history, range summary and recoverable prior deficits from one consistent database snapshot. Decision: add `CounterHabitOverviewReader.read` and wire `counterConfigurationReaderProvider`, `counterAuditReaderProvider`, `counterLifecycleActionServiceProvider` and `counterHabitOverviewReaderProvider` in `counter_habit_providers.dart`. Alternatives: issue multiple independent transactions that could observe different database states. Consequences: complete single-habit inspection runs in one read-only transaction with zero writes.
+
+## ADR-037: Read-only multi-habit counter dashboard summary reader — 2026-11-27
+
+Context: a daily dashboard needs each stored counter habit's roster evaluation, specific applicability reason, prior recoverable deficits (only when the habit is active on that date), and aggregate day summary from a single read snapshot. Decision: add `CounterDashboardReader.readForDate`, combining `CounterDayRosterReader`, `HabitApplicabilityReader.describe`, `CounterHistoryReader.findRecoverableDeficits` and `CounterRangeSummary.fromEvaluations` in one read transaction. Alternatives: run separate per-habit transactions or auto-create occurrences when loading the dashboard. Consequences: dashboard reads are atomic and side-effect-free.
+
+## ADR-038: Read-set-bound counter historical correction preview — 2026-11-27
+
+Context: backdated target corrections must preview exact affected ranges and occurrence impacts and must fail safely if any underlying data or the local calendar day changes before confirmation. Decision: add `CounterCorrectionPreviewer`, which validates unit compatibility and resolution/recovery consistency, computes per-occurrence status transitions, marks unimplemented derived engines (`score`, `streak`, `reward`, `achievement`) explicitly as `notImplemented`, generates an English confirmation summary, and binds a deterministic JSON `snapshotSignature` covering the local date, version, target, schedule, lifecycle, occurrences, events, resolutions and recoveries. Alternatives: bind confirmation only to a version ID or allow unit changes to reinterpret history. Consequences: any concurrent source mutation or midnight boundary makes the preview stale.
+
+## ADR-039: Atomic counter historical correction commit and preimage audit — 2026-11-27
+
+Context: confirming a counter target correction must update the version target and affected occurrence target snapshots while preserving full before/after preimages and keeping direct-SQL protection triggers active. Decision: schema version 11 adds immutable `habit_counter_correction_audit`; `CounterCorrectionWriter.commit` revalidates that the confirmed preview is not stale inside one SQLite write transaction, updates `habit_counter_targets` and `habit_occurrences` while recreating the protection triggers in that same transaction, and records full JSON before/after preimages without modifying source `habit_counter_events`. Alternatives: delete protection triggers permanently or overwrite source events. Consequences: failed or stale commits roll back completely, source events remain intact, and direct SQL updates remain blocked.
+
+## ADR-040: Extended date-only recurrence evaluation and 5-column schedule persistence — 2026-11-27
+
+Context: Milestone 1 requires custom day intervals, monthly day-of-month schedules (default skip or optional last-day fallback) and one-time schedules without breaking existing 5-column `habit_schedules` queries. Decision: extend `HabitSchedule` with `IntervalSchedule`, `MonthlyDaySchedule` and `OneTimeSchedule`, and upgrade `habit_schedules` in schema version 11 to accept `'interval'`, `'monthly_skip'`, `'monthly_last_day'` and `'one_time'` while preserving the 5-column layout and existing rows. Alternatives: use timestamp arithmetic or break positional 5-column SQL compatibility. Consequences: leap years, nonexistent monthly dates and custom intervals evaluate deterministically on pure Gregorian calendar dates.
+
+## ADR-041: Version-scoped habit metadata and priority weights — 2026-11-27
+
+Context: habits require versioned description, symbol, category, priority (`Critical 4`, `High 3`, `Normal 2`, `Low 1`), privacy, recovery/score/streak/reward inclusion flags and display order without guessing values for migrated versions. Decision: add `HabitPriority`, `HabitMetadata`, `HabitMetadataStore` and `habit_version_metadata` in schema version 11, with triggers blocking unconfirmed edits once occurrences exist. Alternatives: store untyped JSON blobs or assign default categories during migration. Consequences: legacy versions without metadata remain `null` until explicitly configured.
+
+## ADR-042: Independent multi-checklist habit engine and Daily Prayers template — 2026-11-27
+
+Context: multi-checklist habits require independent item statuses, partial completion when some items are done, and per-item prior-date recovery without overwriting same-day logs or auto-seeding records. Decision: add `ChecklistItemDefinition`, `ChecklistDayProgress`, `ChecklistStarterTemplate.dailyPrayers` (`S`: Fajr, Dhuhr, Asr, Maghrib, Isha) and `ChecklistHabitService` backed by `habit_checklist_items`, `habit_checklist_occurrences`, `habit_checklist_item_logs` and `habit_checklist_item_recoveries` in schema version 11. Alternatives: collapse checklist progress into a single boolean or counter. Consequences: each checklist item retains its own log and recovery audit trail.
+
+## ADR-043: Avoidance habit engine, daily confirmation and Self Control template — 2026-11-27
+
+Context: avoidance habits support repeated incidents and a configurable maximum (`maxIncidents >= 0`), must never enable recovery, and must not treat zero incidents as confirmed success without daily confirmation. Decision: add `AvoidanceTarget`, `AvoidanceDayProgress`, `AvoidanceStarterTemplate.selfControl` (`O`: max 0, private, no recovery) and `AvoidanceHabitService` backed by `habit_avoidance_targets`, `habit_avoidance_occurrences`, `habit_avoidance_incidents` and `habit_avoidance_resolutions`. Alternatives: auto-complete avoidance days with zero incidents or allow recovery. Consequences: exceeding `maxIncidents` fails immediately while still recording subsequent incidents; unconfirmed days within the limit remain `pending`.
+
+## ADR-044: Boolean and duration (manual and timer) tracking engines — 2026-11-27
+
+Context: Milestone 1 requires simple boolean habits and duration habits supporting both manual seconds and validated start/end timer intervals. Decision: add `BooleanLogState`, `DurationTarget`, `DurationEntryInput` (`manual` and `timer`), `DurationDayProgress` and `BooleanDurationHabitService` backed by `habit_typed_targets`, `habit_typed_occurrences`, `habit_duration_events` and `habit_typed_logs`. Alternatives: store floating-point minutes or discard timer start/end timestamps. Consequences: duration progress is exact whole seconds and timer entries enforce `endedAtUtc > startedAtUtc`.
+
+## ADR-045: Fixed-scale measurement, time-of-day and range tracking engines — 2026-11-27
+
+Context: measurement, time-of-day and range habits require typed validation and exact precision without floating-point rounding bugs. Decision: add `MeasurementTarget` (signed 64-bit integer `scaledTarget` with `decimalPlaces` 0..6 and `atLeast`/`atMost`/`exact` rule), `TimeOfDayTarget` (`0..1439` minutes since local midnight with `atOrBefore`/`atOrAfter` rule), `RangeTarget` (`[minScaled, maxScaled]` with `decimalPlaces` 0..6) and `MeasurementTimeRangeHabitService`. Alternatives: store IEEE-754 floats or unvalidated strings. Consequences: all typed targets and logs are validated by both Dart domain objects and SQLite `CHECK` constraints.
+
+## ADR-046: Unified starter template catalog and multi-type habit registry — 2026-11-27
+
+Context: callers and providers need a single catalog of all four approved starter templates (`O`, `N`, `S`, `P`) and a read-only registry that identifies any habit version's tracking type, metadata, schedule and applicability on a date. Decision: add `StarterTemplateCatalog`, `UnifiedHabitRegistryReader` and corresponding Riverpod providers in `counter_habit_providers.dart`. Alternatives: scatter template constants or guess tracking types when target rows are absent. Consequences: all eight tracking types (`counter`, `checklist`, `avoidance`, `boolean`, `duration`, `measurement`, `timeOfDay`, `range`) plus `unconfigured` legacy versions are inspected uniformly in one read transaction.

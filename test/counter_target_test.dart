@@ -8,6 +8,8 @@ import 'package:hibi/features/habits/domain/counter_target.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'test_schema_downgrade.dart';
+
 void main() {
   test('counter targets reject nonpositive counts and blank units', () {
     expect(() => CounterTarget(count: 0, unit: 'pages'), throwsRangeError);
@@ -70,6 +72,7 @@ void main() {
       );
       await original.close();
       final legacy = sqlite3.open(file.path);
+      dropV11Tables(legacy);
       legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute('DROP TABLE habit_counter_event_audit');
@@ -96,7 +99,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10,
+        11,
       );
       await CounterTargetStore(migrated)
           .insert('v1', CounterTarget(count: 5, unit: 'pages'));

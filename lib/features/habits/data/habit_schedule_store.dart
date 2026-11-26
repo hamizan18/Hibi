@@ -18,6 +18,12 @@ class HabitScheduleStore {
         'weekdays',
         weekdays.fold<int>(0, (mask, day) => mask | (1 << (day - 1))),
       ),
+      IntervalSchedule(:final everyDays) => ('interval', everyDays),
+      MonthlyDaySchedule(:final dayOfMonth, :final lastDayFallback) => (
+        lastDayFallback ? 'monthly_last_day' : 'monthly_skip',
+        dayOfMonth,
+      ),
+      OneTimeSchedule() => ('one_time', null),
     };
     return _database.customStatement(
       '''
@@ -70,6 +76,30 @@ class HabitScheduleStore {
               if ((mask & (1 << (day - 1))) != 0) day,
           },
         );
+      case 'interval':
+        final everyDays = row.readNullable<int>('weekday_mask');
+        if (everyDays == null || everyDays <= 0) {
+          throw const FormatException('Invalid interval schedule parameter');
+        }
+        return IntervalSchedule(
+          start: start,
+          endExclusive: end,
+          everyDays: everyDays,
+        );
+      case 'monthly_skip':
+      case 'monthly_last_day':
+        final dayOfMonth = row.readNullable<int>('weekday_mask');
+        if (dayOfMonth == null || dayOfMonth < 1 || dayOfMonth > 31) {
+          throw const FormatException('Invalid monthly day parameter');
+        }
+        return MonthlyDaySchedule(
+          start: start,
+          endExclusive: end,
+          dayOfMonth: dayOfMonth,
+          lastDayFallback: row.read<String>('recurrence') == 'monthly_last_day',
+        );
+      case 'one_time':
+        return OneTimeSchedule(date: start);
       default:
         throw const FormatException('Unknown recurrence');
     }

@@ -6,6 +6,8 @@ import 'package:hibi/core/database/app_database.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
+import 'test_schema_downgrade.dart';
+
 void main() {
   test('occurrences enforce applicable versions and preserve multiple counter events', () async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -96,6 +98,7 @@ void main() {
     );
     await original.close();
     final legacy = sqlite3.open(file.path);
+    dropV11Tables(legacy);
     legacy.execute('DROP TABLE habit_counter_recoveries');
     legacy.execute('DROP TABLE habit_counter_resolutions');
     legacy.execute('DROP TABLE habit_counter_event_audit');
@@ -132,7 +135,7 @@ void main() {
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      10,
+      11,
     );
     await migrated.customStatement(
       "INSERT INTO habit_occurrences VALUES ('o', 'h', 'v', '2026-11-26', 5, 'pages')",
