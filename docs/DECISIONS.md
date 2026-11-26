@@ -1,0 +1,25 @@
+# Architecture decision records
+
+## ADR-001: Offline-only Android foundation — 2026-11-26
+
+Context: a single-user personal application must function without network access. Decision: Flutter Android-only, local Drift/SQLite, no backend or accounts. Alternatives: cloud synchronization or remote database. Consequences: no account recovery or cross-device synchronization; backups require explicit local data management. SQLite is not encrypted by default.
+
+## ADR-002: Feature-first with injected dependencies — 2026-11-26
+
+Context: incremental features need testable rules without needless complexity. Decision: presentation, application/state, domain and data responsibilities grouped by feature, with Riverpod for injection and an injectable clock. Alternatives: monolithic widgets or a full framework for every layer. Consequences: independently testable logic; create layers only where useful.
+
+## ADR-003: Milestone-scoped dependencies — 2026-11-26
+
+Context: preferred packages cover future functionality but are not all needed now. Decision: add only compatible packages needed by the active milestone; use Material 3, GoRouter, Riverpod and Drift for the foundation. Alternatives: install all planned packages immediately. Consequences: future dependency choices and versions remain subject to SDK compatibility and milestone approval.
+
+## ADR-004: Development identity — 2026-11-26
+
+Context: no final application ID was supplied. Decision: retain `com.example.hibi` as a development placeholder. Alternative: invent a production identifier. Consequence: confirm the permanent ID before public distribution; changing it affects Android application identity.
+
+## ADR-005: Minimal explicit Drift schema — 2026-11-26
+
+Context: the foundation needs persistence without creating future feature tables. Decision: Drift with a single explicit SQL settings table and no generated code. Native SQLite opens lazily in the application support directory; tests inject their own executor. Alternatives: generated Drift tables now or unused feature tables. Consequences: small initial dependency and schema surface, but queries do not have automatic table change notifications; introduce typed generated tables and explicit migrations as features require them.
+
+## ADR-006: Local date presentation — 2026-11-26
+
+Context: the foundation only displays one Japanese-style date format. Decision: use a small weekday mapping and an injected local clock; recalculate on resume and at the next local midnight. Alternative: introduce Intl as a direct dependency for this single format. Consequence: add Intl if later formatting requirements justify it; historical date storage remains a separate future responsibility.
