@@ -5,6 +5,7 @@ import '../../../core/services/app_clock.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import '../domain/measurement_time_range_habit.dart';
+import 'habit_creation_audit.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
 import 'habit_schedule_store.dart';
@@ -55,6 +56,13 @@ class MeasurementTimeRangeHabitService {
         ruleStr,
       ],
     );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'measurement',
+    );
   });
 
   Future<void> createTimeOfDay({
@@ -87,6 +95,13 @@ class MeasurementTimeRangeHabitService {
       VALUES (?, 'time_of_day', ?, ?)
       ''',
       [versionId, target.targetMinutesSinceMidnight, ruleStr],
+    );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'time_of_day',
     );
   });
 
@@ -122,6 +137,13 @@ class MeasurementTimeRangeHabitService {
         target.decimalPlaces,
         target.unit,
       ],
+    );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'range',
     );
   });
 

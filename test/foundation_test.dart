@@ -35,6 +35,29 @@ void main() {
     expect(find.text('Welcome to Hibi'), findsOneWidget);
   });
 
+  testWidgets('opens habit builder from Today and More', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appClockProvider.overrideWithValue(FakeClock()),
+          databaseInitializationProvider.overrideWith((ref) async {}),
+        ],
+        child: const HibiApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create habit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Habit Builder'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create habit'));
+    await tester.pumpAndSettle();
+    expect(find.text('Habit Builder'), findsOneWidget);
+  });
+
   testWidgets('shows local storage initialization errors', (tester) async {
     await tester.pumpWidget(
       ProviderScope(

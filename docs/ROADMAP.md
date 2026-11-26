@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and its domain, persistence, recurrence, historical counter correction preview/commit, multi-type tracking engines (counter, checklist, avoidance, boolean, duration, measurement, time-of-day, range), all four optional editable starter templates and Riverpod service providers are implemented; user-facing habit UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress. Its Habit Builder and optional starter templates are available, while logging and other habit-management UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

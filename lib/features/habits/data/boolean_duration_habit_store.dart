@@ -5,6 +5,7 @@ import '../../../core/services/app_clock.dart';
 import '../domain/boolean_duration_habit.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
+import 'habit_creation_audit.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
 import 'habit_schedule_store.dart';
@@ -42,6 +43,13 @@ class BooleanDurationHabitService {
       ''',
       [versionId],
     );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'boolean',
+    );
   });
 
   Future<void> createDuration({
@@ -70,6 +78,13 @@ class BooleanDurationHabitService {
       VALUES (?, 'duration', ?)
       ''',
       [versionId, target.targetSeconds],
+    );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'duration',
     );
   });
 

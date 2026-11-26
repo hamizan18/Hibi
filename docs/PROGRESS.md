@@ -2,7 +2,7 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; all internal Milestone 1 domain, recurrence, metadata, multi-type tracking engines (counter, checklist, avoidance, boolean, duration, measurement, time-of-day, range), all four optional editable starter templates (`O`, `N`, `S`, `P`), counter historical correction preview/commit with preimage audit, dashboard/overview readers and Riverpod service providers are implemented (schema version 11), while user-facing habit UI and Android milestone verification remain to be completed.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine remains in progress. The Habit Builder and optional starter templates are available from Today and More; daily logging, other habit-management UI and milestone-wide Android verification remain incomplete.
 
 ## Implemented
 
@@ -10,6 +10,7 @@ Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; al
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
 - Riverpod and GoRouter; Drift/SQLite version 11, including settings, habit identity, versioned counter/checklist/avoidance/boolean/duration/measurement/time-of-day/range configurations, version metadata (category, symbol, priority, privacy, ordering), daily/weekday/interval/monthly/one-time schedules, all four optional editable starter templates, counter historical correction preview/commit and preimage audit, counter occurrences/events/resolutions/recoveries, transactional action services, effective day-status interpretation, multi-habit day rosters and dashboard summaries, date-range history/summary/overview and recoverable-deficit queries, detailed lifecycle/applicability readers, unified multi-type habit registry and Riverpod service providers; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
+- Habit Builder creates counter, checklist, avoidance, boolean, duration, measurement, time-of-day and range habits with validated schedules and metadata. Templates are optional and create no historical occurrences.
 
 ## Verification
 
@@ -283,10 +284,22 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && git status --short"`: formatting unchanged (86 files), analysis passed with no issues and all 122 tests passed.
 - Isolated databases were used across all tests; Android migration and integration tests were not run. No user-facing habit UI or production data was added.
 
+### Milestone 1: habit builder
+
+- Started from a clean `main...origin/main`. Before extending the implementation, `cmd.exe /c "flutter.bat test test/unified_habit_registry_test.dart test/habit_schedule_store_test.dart test/habit_metadata_test.dart"` passed all 9 tests.
+- Added `HabitBuilderScreen`, navigable from Today and More. It offers eight tracking types, editable optional templates, schedules, start dates and version metadata. Counter configuration and metadata are saved together; no occurrences are created by the form. Existing data is not migrated or overwritten.
+- `cmd.exe /c "flutter.bat analyze && flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` initially stopped at analysis due to six deprecated dropdown `value` uses; switched to `initialValue` and reran successfully: analysis passed and 8 tests passed.
+- `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart"` passed 6 widget tests, including edited counter and checklist templates, private avoidance, invalid input, exact decimal measurement and interval persistence, using isolated in-memory databases and an injected clock.
+- `cmd.exe /c flutter.bat devices` detected Android 16 device `2510DRA23E`; milestone-wide integration and migration verification was not performed.
+- In a temporary Flutter application with a separate application ID and storage, `cmd.exe /c "flutter.bat run -d i7xsrs7hvgbqgyln -t lib/probe.dart"` built the debug APK but installation was rejected with `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`; the screen was not visually checked on Android. No installation restriction was bypassed.
+- Pre-existing audit gap exposed by the builder: checklist, avoidance and typed creation services record lifecycle events but do not write `habit_version_audit` creation snapshots. Their complete configuration creation is therefore not audited; milestone acceptance requires fixing and testing this.
+- A later formatting/analysis/test run reported four files already formatted and analysis clean, but the test compiler failed with `PathNotFoundException` for its temporary `output.dill`; the command timed out after 300 seconds. The earlier widget runs above passed.
+- Afterward, `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed all 10 tests.
+
 ## Limitations
 
-Database, occurrence data, lifecycle/resolution reasons, recovery notes and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. User-facing habit UI screens (Today logging, Habit Builder/Starter Templates, Lifecycle/Recovery controls, Historical Correction dialog) and Android device integration/migration verification for Milestone 1 remain unimplemented. Raw SQL can bypass application-level writer checks. Immutable triggers on lifecycle, resolution, recovery, checklist, avoidance, typed logs and correction audit tables require an explicit future privacy-deletion design. No release signing or final application ID has been configured.
+Database, occurrence data, lifecycle/resolution reasons, recovery notes and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Today logging, lifecycle/recovery controls, historical correction UI and Android milestone integration/migration verification remain unimplemented or unverified. Raw SQL can bypass application-level writer checks. Immutable triggers on lifecycle, resolution, recovery, checklist, avoidance, typed logs and correction audit tables require an explicit future privacy-deletion design. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Implement the user-facing Milestone 1 Habit Builder and optional Starter Templates UI screen (accessible from Today/More), allowing the user to skip or customize starter templates (`O`, `N`, `S`, `P`) and create habits with validated schedules, targets and metadata using the existing Riverpod providers; verify with widget tests.
+Add transactional creation audit snapshots for non-counter habit types and test rollback and historical preservation; then implement the Today habit roster and current-day logging UI without fabricating occurrences.

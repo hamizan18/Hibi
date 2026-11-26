@@ -6,6 +6,8 @@ Hibi is offline and single-user; sensitive data must never be sent to external s
 
 The local `habit_version_audit` table stores habit names, target units, counts and schedule details in unencrypted snapshots; `habit_counter_event_audit` stores occurrence IDs, progress quantities and timestamps. Counter resolution records, counter recovery records and lifecycle events may contain optional user-provided reasons or notes and target/progress snapshots. They are not tamper-proof, have no private-view access controls or privacy deletion workflow yet, and are not exposed in the UI. Those controls must be implemented before a privacy milestone can be accepted.
 
+Non-counter creation snapshots also contain version metadata, schedules, checklist labels or typed targets and lifecycle details. They are stored in the same unencrypted local audit table and require the same future privacy controls and deletion handling.
+
 ## Planned privacy milestone
 
 Provide optional local PIN, supported device biometrics, automatic and resume locking, and private visibility controls. Never store plaintext PIN or biometric data; use a suitable salted PIN verifier, secure storage and platform biometrics. Define forgotten-PIN recovery without insecure bypass or fictitious account recovery. Evaluate vetted database encryption and encrypted backups before accepting this milestone; never invent cryptography.

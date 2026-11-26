@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/database/app_database.dart';
 import '../core/services/app_clock.dart';
+import '../features/habits/presentation/habit_builder_screen.dart';
 import 'theme/hibi_theme.dart';
 
 const _destinations = [
@@ -28,6 +29,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
           path: _destinations[i].path,
           builder: (context, state) => _FoundationScreen(index: i),
         ),
+      GoRoute(
+        path: '/habit-builder',
+        builder: (context, state) => const HabitBuilderScreen(),
+      ),
     ],
   );
   ref.onDispose(router.dispose);
@@ -140,19 +145,31 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                     Text(
                       widget.index == 0
                           ? 'Welcome to Hibi'
+                          : widget.index == 4
+                          ? 'More'
                           : '${destination.label} is not available yet',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       widget.index == 0
-                          ? 'Habit tracking is not available yet. Your data will stay on this device.'
+                          ? 'Create a habit to get started. Logging is not available yet. Your data stays on this device.'
+                          : widget.index == 4
+                          ? 'Create a habit below. Other features are not available yet.'
                           : 'This section is planned for a future milestone.',
                     ),
                   ],
                 ),
               ),
             ),
+            if (widget.index == 0 || widget.index == 4) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => context.push('/habit-builder'),
+                icon: const Icon(Icons.add),
+                label: const Text('Create habit'),
+              ),
+            ],
           ],
         ),
       ),

@@ -5,6 +5,7 @@ import '../../../core/services/app_clock.dart';
 import '../domain/avoidance_habit.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
+import 'habit_creation_audit.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
 import 'habit_schedule_store.dart';
@@ -78,6 +79,13 @@ class AvoidanceHabitService {
       habitId: habitId,
       effectiveDate: startDate,
       state: HabitLifecycleState.active,
+    );
+    await writeNonCounterCreationAudit(
+      _db,
+      habitId: habitId,
+      versionId: versionId,
+      lifecycleEventId: lifecycleEventId,
+      trackingType: 'avoidance',
     );
   });
 
