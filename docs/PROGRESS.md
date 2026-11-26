@@ -75,10 +75,18 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and 17 tests passed.
 - Isolated database tests cover version-3 migration preserving settings/target, before/after audit snapshots, rejection of backdated writes and rollback on audit insertion failure. Android migration and integration tests were not run.
 
+### Milestone 1: historical correction design
+
+- At session start `git status --short --branch` showed clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 17 tests.
+- Documented a proposed correction preview/confirmation contract, stale-preview protection, atomic audit/reconciliation boundaries, preservation of historical preimages and privacy constraints in ARCHITECTURE.md, with acceptance scenarios in TEST_PLAN.md and ADR-010 in DECISIONS.md. This is design only; it does not implement correction or change the database.
+- Added a regression test confirming an attempted insertion before an already scheduled future version does not change versions, targets or audit records.
+- `cmd.exe /c "dart.bat format test\counter_habit_writer_test.dart && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting passed, analysis passed and all 18 tests passed.
+- Current schema lacks occurrences, events and historical preimage representation; correction preview, confirmation, derived recalculation and UI remain unavailable. No Android integration or migration test was run this session.
+
 ## Limitations
 
 Database and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Habit UI, counter logging, scheduling, lifecycle and historical correction preview, confirmation and recalculation are not implemented. Raw SQL and the low-level target store bypass the writer's safeguards. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design the explicit historical correction workflow: affected-range preview and confirmation, transactional audit of old/new values, and recalculation boundaries, before exposing habit edits in the UI.
+Design and implement the occurrence and progress-event schema with a non-destructive migration and isolated tests, including unique occurrence dates and links to applicable versions; keep correction and UI unavailable until their prerequisites are verified.

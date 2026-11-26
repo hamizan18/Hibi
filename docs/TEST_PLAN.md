@@ -22,3 +22,13 @@ This plan specifies future checks, not passed results. Run unit, widget, isolate
 Before marking a milestone complete, run relevant `dart format .`, `flutter analyze`, `flutter test`; when required and available also `flutter test integration_test` and `flutter build apk --debug`, plus necessary code generation. Execute integration tests on a supported device/emulator when available. Roadmap acceptance criteria are mandatory; report unavailable checks and unresolved failures rather than claiming completion.
 
 For Android process-restart persistence verification, use a separate test application ID and private storage, not the user's `com.example.hibi` database. The test should use the real `AppDatabase.open()` path, write a known marker and process ID, stop its process, relaunch, and verify both the marker and a different process ID. Remove only the test application and its own data afterwards. A database file's existence alone does not establish that a written value survived. Record the device, commands, outcomes and any limitations in PROGRESS.md.
+
+## Historical correction acceptance (planned; not yet implemented)
+
+- Preview a counter target correction spanning multiple versions and existing occurrences: show exact local date range, original/proposed targets, affected record counts, and possible score, streak and reward impact; distinguish unknown impact from zero.
+- Cancel or decline confirmation: all versions, occurrences, events, recoveries, audit entries and derived state remain unchanged.
+- Change any affected version, schedule, occurrence, event or recovery after preview: confirmation must fail as stale without writes; a new preview is required. Exercise a local-day boundary and time-zone change.
+- Confirm a valid correction: preserve preimages and source events, resolve versions deterministically without overlap, append old/new audit snapshots, and reconcile every implemented affected derived value. Verify an occurrence before the range and an unrelated habit stay unchanged.
+- Reject incompatible tracking-type/unit reinterpretation; preserve missing and pending records, and never invent failures or recovery quantities.
+- Inject a failure after partial mutation, after audit insertion and during any derived-data reconciliation; each failure must leave the database and derived state unchanged. Repeating a confirmed request must not duplicate changes or rewards.
+- Verify private correction previews and audit history follow private-access rules and sensitive details do not appear in diagnostic logs or ordinary exports.

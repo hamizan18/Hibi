@@ -69,6 +69,59 @@ void main() {
   });
 
   test(
+    'inserting before a scheduled version leaves history unchanged',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final writer = CounterHabitWriter(db, FixedClock());
+      await writer.create(
+        habitId: 'h',
+        versionId: 'v1',
+        auditId: 'a1',
+        name: 'Read',
+        effectiveDate: DateTime(2026, 11, 26),
+        target: CounterTarget(count: 5, unit: 'pages'),
+      );
+      await writer.scheduleVersion(
+        habitId: 'h',
+        versionId: 'v2',
+        auditId: 'a2',
+        name: 'Read more',
+        effectiveDate: DateTime(2026, 12, 15),
+        target: CounterTarget(count: 20, unit: 'pages'),
+      );
+      await expectLater(
+        writer.scheduleVersion(
+          habitId: 'h',
+          versionId: 'v3',
+          auditId: 'a3',
+          name: 'Earlier change',
+          effectiveDate: DateTime(2026, 12, 1),
+          target: CounterTarget(count: 10, unit: 'pages'),
+        ),
+        throwsStateError,
+      );
+      final versions = await db.customSelect('''
+      SELECT v.id, v.effective_end, t.target_count
+      FROM habit_versions v
+      JOIN habit_counter_targets t ON t.habit_version_id = v.id
+      ORDER BY v.effective_start
+    ''').get();
+      expect(versions.map((row) => row.read<String>('id')), ['v1', 'v2']);
+      expect(versions.map((row) => row.read<int>('target_count')), [5, 20]);
+      expect(versions.first.read<String>('effective_end'), '2026-12-15');
+      expect(versions.last.readNullable<String>('effective_end'), isNull);
+      expect(
+        (await db
+                .customSelect('SELECT COUNT(*) AS n FROM habit_version_audit')
+                .getSingle())
+            .read<int>('n'),
+        2,
+      );
+    },
+  );
+
+  test(
     'backdated and same-day edits are refused without changing history',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
