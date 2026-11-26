@@ -10,6 +10,8 @@ The counter progress, bounded recovery, date-range summary (`CounterRangeSummary
 
 `HabitBuilderScreen` is reachable from Today and More. It validates form input, selects optional editable templates and calls the existing injected services; counter creation and version metadata insertion share a transaction. Measurement and range inputs are converted directly from decimal text to scaled integers. The screen creates no occurrences and warns that privacy controls and database encryption are unavailable. Logging, lifecycle controls and correction UI are not yet exposed.
 
+Non-counter creation services write their version, target or checklist items, schedule, optional metadata, lifecycle and creation audit in one transaction. The audit serializes the persisted configuration and does not infer snapshots for older records.
+
 ## Historical correction design (planned, not implemented)
 
 The current `CounterHabitWriter` only appends future versions and rejects same-day/backdated edits. An internal counter occurrence store retrieves or creates an occurrence on demand, an internal progress writer appends same-day events with creation audit, and an internal recovery writer appends bounded current-day recovery entries for explicitly failed prior occurrences. No historical progress correction, correction preview, confirmation, audit access control or derived-data reconciliation exists. Do not expose correction or treat direct SQL and `CounterTargetStore` as an authorized correction path.

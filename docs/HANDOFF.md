@@ -6,7 +6,7 @@ Milestone 0 is accepted; Milestone 1 remains in progress. The Habit Builder is r
 
 ## Latest work
 
-Added `lib/features/habits/presentation/habit_builder_screen.dart` and navigation in `lib/app/app.dart`. The form creates all eight existing tracking types, supports daily/weekday/interval/monthly/one-time schedules and today or future start dates, version metadata, and all four optional editable templates. Counter configuration and metadata share a transaction; opening or editing the form creates no records. Added widget coverage in `test/habit_builder_screen_test.dart` and navigation coverage in `test/foundation_test.dart`. No schema changes.
+Added `habit_creation_audit.dart` and integrated it into the checklist, avoidance, boolean/duration and measurement/time/range services. Their seven non-counter types now write creation snapshots in the same transaction as configuration, schedule, lifecycle and metadata. No schema or public creation API changed. `test/non_counter_creation_audit_test.dart` covers snapshots, rollback and disk reopen without inventing audits for legacy records.
 
 ## Decisions and constraints
 
@@ -14,16 +14,13 @@ See ADR-037 through ADR-046 and BUSINESS_RULES.md. Historical counter target cor
 
 ## Verification and blockers
 
-Before changes, `cmd.exe /c "flutter.bat test test/unified_habit_registry_test.dart test/habit_schedule_store_test.dart test/habit_metadata_test.dart"` passed 9 tests. Initial `flutter.bat analyze` stopped on six deprecated dropdown `value` uses; after changing them to `initialValue`, `cmd.exe /c "flutter.bat analyze && flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed analysis and 8 tests. After adding checklist and exact-decimal/interval scenarios, `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart"` passed 6 tests. Tests used isolated databases and an injected clock. Device `2510DRA23E` running Android 16 was detected; milestone-wide Android migration/integration tests were not run.
+At session start, `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed 10 baseline tests. `cmd.exe /c "flutter.bat analyze && flutter.bat test test/non_counter_creation_audit_test.dart test/checklist_habit_test.dart test/avoidance_habit_test.dart test/boolean_duration_habit_test.dart test/measurement_time_range_habit_test.dart test/habit_builder_screen_test.dart"` passed analysis and 32 tests. A subsequent six-file format check passed and `flutter.bat test test/non_counter_creation_audit_test.dart` passed all 22 audit tests; exact format command is in PROGRESS.md. Tests used injected clocks and isolated databases.
 
-An isolated temporary Android application built successfully with `cmd.exe /c "flutter.bat run -d i7xsrs7hvgbqgyln -t lib/probe.dart"`, but installation was rejected with `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. The screen was not visually verified on the device; no installation restriction was bypassed. The temporary application and files were removed.
+Android integration and device migration tests were not run in this session. The previous session's isolated Android test build could not be installed because the device rejected installation with `INSTALL_FAILED_USER_RESTRICTED`.
 
-Known pre-existing audit gap: the checklist, avoidance and typed-habit creation services do not write `habit_version_audit` creation snapshots; the builder exposes those existing paths. Lifecycle creation is recorded, but it is not a complete target/metadata creation audit. Milestone 1 must not be accepted until this is addressed and tested.
+Creation snapshots are unencrypted and contain sensitive configuration. Legacy non-counter habits created before this change still lack a creation snapshot; no values were invented to backfill them. Counter creation's existing audit format is unchanged.
 
-The final combined format/analysis/test attempt found formatting unchanged and analysis clean, but its test compiler reported missing temporary `output.dill` and the command timed out after 300 seconds. Earlier targeted widget runs passed; do not treat the timed-out run as successful.
-
-The subsequent `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed all 10 tests. The same final attempt had already verified formatting of the four changed Dart files and clean analysis before the timeout.
 
 ## Next bounded task
 
-Add transactional creation audit snapshots for non-counter habit types and test rollback and historical preservation; then implement the Today roster and current-day logging UI without fabricating occurrences.
+Implement the Today habit roster and current-day logging UI using existing services, preserving pending/unknown states and not fabricating occurrences.

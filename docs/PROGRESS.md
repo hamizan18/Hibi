@@ -296,10 +296,18 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - A later formatting/analysis/test run reported four files already formatted and analysis clean, but the test compiler failed with `PathNotFoundException` for its temporary `output.dill`; the command timed out after 300 seconds. The earlier widget runs above passed.
 - Afterward, `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed all 10 tests.
 
+### Milestone 1: non-counter creation audit
+
+- At session start, Git showed uncommitted Habit Builder and documentation changes from the prior session; they were preserved. `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed all 10 baseline tests.
+- Added transactional creation snapshots for checklist, avoidance, boolean, duration, measurement, time-of-day and range habits in the existing `habit_version_audit` table. Snapshots capture persisted configuration, optional metadata, schedule and lifecycle with the original creation timestamp. Existing unaudited records are not backfilled; no schema migration or public creation API change was made.
+- `cmd.exe /c "flutter.bat analyze && flutter.bat test test/non_counter_creation_audit_test.dart test/checklist_habit_test.dart test/avoidance_habit_test.dart test/boolean_duration_habit_test.dart test/measurement_time_range_habit_test.dart test/habit_builder_screen_test.dart"`: analysis passed and all 32 tests passed. The audit tests use injected clocks and isolated databases and cover all seven types, failure rollback, reopening and unchanged legacy records.
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed lib/features/habits/data/habit_creation_audit.dart lib/features/habits/data/checklist_habit_store.dart lib/features/habits/data/avoidance_habit_store.dart lib/features/habits/data/boolean_duration_habit_store.dart lib/features/habits/data/measurement_time_range_habit_store.dart test/non_counter_creation_audit_test.dart && flutter.bat test test/non_counter_creation_audit_test.dart"`: six files already formatted; all 22 audit tests passed.
+- Android integration and device migration verification were not run; this session did not complete Milestone 1. Audit snapshots remain unencrypted, and old records without creation audits remain without them.
+
 ## Limitations
 
 Database, occurrence data, lifecycle/resolution reasons, recovery notes and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Today logging, lifecycle/recovery controls, historical correction UI and Android milestone integration/migration verification remain unimplemented or unverified. Raw SQL can bypass application-level writer checks. Immutable triggers on lifecycle, resolution, recovery, checklist, avoidance, typed logs and correction audit tables require an explicit future privacy-deletion design. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Add transactional creation audit snapshots for non-counter habit types and test rollback and historical preservation; then implement the Today habit roster and current-day logging UI without fabricating occurrences.
+Implement the Today habit roster and current-day logging UI using the existing services, preserving pending and unknown states without fabricating occurrences.

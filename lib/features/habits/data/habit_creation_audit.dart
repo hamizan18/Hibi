@@ -14,45 +14,59 @@ Future<void> writeNonCounterCreationAudit(
   required String lifecycleEventId,
   required String trackingType,
 }) async {
-  final version = await db.customSelect(
-    'SELECT * FROM habit_versions WHERE id = ? AND habit_id = ?',
-    variables: [Variable<String>(versionId), Variable<String>(habitId)],
-  ).getSingle();
-  final schedule = await db.customSelect(
-    'SELECT * FROM habit_schedules WHERE habit_version_id = ?',
-    variables: [Variable<String>(versionId)],
-  ).getSingle();
-  final metadata = await db.customSelect(
-    'SELECT * FROM habit_version_metadata WHERE habit_version_id = ?',
-    variables: [Variable<String>(versionId)],
-  ).getSingleOrNull();
-  final lifecycle = await db.customSelect(
-    'SELECT * FROM habit_lifecycle_events WHERE id = ? AND habit_id = ?',
-    variables: [Variable<String>(lifecycleEventId), Variable<String>(habitId)],
-  ).getSingle();
+  final version = await db
+      .customSelect(
+        'SELECT * FROM habit_versions WHERE id = ? AND habit_id = ?',
+        variables: [Variable<String>(versionId), Variable<String>(habitId)],
+      )
+      .getSingle();
+  final schedule = await db
+      .customSelect(
+        'SELECT * FROM habit_schedules WHERE habit_version_id = ?',
+        variables: [Variable<String>(versionId)],
+      )
+      .getSingle();
+  final metadata = await db
+      .customSelect(
+        'SELECT * FROM habit_version_metadata WHERE habit_version_id = ?',
+        variables: [Variable<String>(versionId)],
+      )
+      .getSingleOrNull();
+  final lifecycle = await db
+      .customSelect(
+        'SELECT * FROM habit_lifecycle_events WHERE id = ? AND habit_id = ?',
+        variables: [
+          Variable<String>(lifecycleEventId),
+          Variable<String>(habitId),
+        ],
+      )
+      .getSingle();
 
   final targetSql = switch (trackingType) {
     'checklist' => null,
     'avoidance' =>
       'SELECT * FROM habit_avoidance_targets WHERE habit_version_id = ?',
-    'boolean' || 'duration' || 'measurement' || 'time_of_day' || 'range' =>
-      'SELECT * FROM habit_typed_targets WHERE habit_version_id = ? AND tracking_type = ?',
+    'boolean' || 'duration' || 'measurement' || 'time_of_day' || 'range' => 'SELECT * FROM habit_typed_targets WHERE habit_version_id = ? AND tracking_type = ?',
     _ => throw ArgumentError.value(trackingType, 'trackingType'),
   };
   final target = targetSql == null
       ? null
-      : await db.customSelect(
-          targetSql,
-          variables: [
-            Variable<String>(versionId),
-            if (trackingType != 'avoidance') Variable<String>(trackingType),
-          ],
-        ).getSingle();
+      : await db
+            .customSelect(
+              targetSql,
+              variables: [
+                Variable<String>(versionId),
+                if (trackingType != 'avoidance') Variable<String>(trackingType),
+              ],
+            )
+            .getSingle();
   final items = trackingType == 'checklist'
-      ? await db.customSelect(
-          'SELECT * FROM habit_checklist_items WHERE habit_version_id = ? ORDER BY display_order, id',
-          variables: [Variable<String>(versionId)],
-        ).get()
+      ? await db
+            .customSelect(
+              'SELECT * FROM habit_checklist_items WHERE habit_version_id = ? ORDER BY display_order, id',
+              variables: [Variable<String>(versionId)],
+            )
+            .get()
       : <QueryRow>[];
   if (trackingType == 'checklist' && items.isEmpty) {
     throw StateError('Checklist creation requires items');
