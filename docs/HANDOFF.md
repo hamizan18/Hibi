@@ -2,11 +2,11 @@
 
 ## Current state
 
-Milestone 0 is in progress; do not begin the habit engine. A Git repository now exists and had a clean working tree at the start of this continuation session. Read AGENTS.md and the documents it lists before continuing.
+Milestone 0 foundation acceptance is verified; Milestone 1 is next and has not been started. Read AGENTS.md and the documents it lists before continuing.
 
 ## Latest work
 
-The latest session verified the existing foundation without changing application code. Updated AGENTS.md, PROJECT_SPEC.md, PROGRESS.md and this handoff to reflect the Git repository and Android device results. See PROGRESS.md for commands and prior implementation details.
+Verified Android process-restart persistence with a temporary separate Android test app using Hibi's `AppDatabase.open()`. Updated PROGRESS.md, TEST_PLAN.md, ROADMAP.md, PROJECT_SPEC.md, README.md and this handoff. No production application code or user data was changed.
 
 ## Decisions and constraints
 
@@ -14,8 +14,8 @@ See DECISIONS.md and DATABASE_SCHEMA.md. The database uses explicit SQL via Drif
 
 ## Verification and blockers
 
-`flutter analyze` and all 6 existing tests passed. On Android 16 device 2510DRA23E, `flutter run` built the APK but failed to install due to device verification and user restriction. A separate overlapping `adb install` succeeded; launching the installed debug app displayed Today, the Japanese date and all five destinations correctly. The database file was created and remained after force-stop and relaunch; a written value was not tested across process restart. No integration test was run. See PROGRESS.md for exact results and do not bypass device security. The SQLite database is not encrypted.
+`flutter analyze` passed and all 6 existing `flutter test` tests passed. The isolated Android probe wrote a marker under PID 17687, then read it under PID 19742 after force-stop and relaunch. The probe APK and temporary host project were removed; Hibi's database was not touched. See PROGRESS.md for the command sequence and previous Android visual verification. This was a temporary test app, not an integration_test suite. SQLite is not encrypted.
 
 ## Next bounded task
 
-Verify a written value survives an Android process restart with an isolated test database and cleanup, without touching existing user data. Record the outcome and assess Milestone 0 acceptance before starting the habit engine.
+Design the Milestone 1 habit identity and effective-dated configuration schema and a non-destructive migration with tests. Preserve historical configurations and user data; do not build unrelated features.

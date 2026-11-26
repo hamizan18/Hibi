@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 is active and remains unaccepted until all applicable gates are verified. Do not implement later milestones before the current milestone passes its acceptance criteria. Each milestone depends on the accepted foundation and preceding relevant capabilities.
+Milestone 0 foundation acceptance is verified; Milestone 1 is next and not yet implemented. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

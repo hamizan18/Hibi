@@ -4,7 +4,7 @@ Hibi (日々), “Small steps, every day.” / “小さな一歩、毎日。”
 
 ## Scope and status
 
-Milestone 0 is the active foundation work, not yet accepted until its gates are verified. The roadmap describes future functionality, not existing features: dynamic habits and historical configuration, history and analytics, finance, journal and mood, goals and focus, gamification, privacy, reminders, backups and exports. Hide or clearly label unfinished functionality. Starter templates are optional and editable, never automatically populated user records. No real history, financial records, incidents or religious activity may be fabricated.
+Milestone 0 foundation acceptance is verified; Milestone 1 is next but not yet implemented. The roadmap describes future functionality, not existing features: dynamic habits and historical configuration, history and analytics, finance, journal and mood, goals and focus, gamification, privacy, reminders, backups and exports. Hide or clearly label unfinished functionality. Starter templates are optional and editable, never automatically populated user records. No real history, financial records, incidents or religious activity may be fabricated.
 
 ## Boundaries
 
