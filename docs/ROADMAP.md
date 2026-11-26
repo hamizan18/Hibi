@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Only initial habit identity and dated name-version schema exist. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Habit identity, dated name versions and counter target storage exist, but tracking and historical correction workflows do not. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

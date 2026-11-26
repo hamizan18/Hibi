@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -38,13 +38,17 @@ class AppDatabase extends GeneratedDatabase {
         )
       ''');
       await _createHabitSchema();
+      await _createCounterTargetSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from != 1 || to != 2) {
+      if (from < 1 || from > 2 || to != 3) {
         throw StateError('No database migration from version $from to $to');
       }
-      await transaction(() => _createHabitSchema());
+      await transaction(() async {
+        if (from == 1) await _createHabitSchema();
+        await _createCounterTargetSchema();
+      });
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -102,6 +106,16 @@ class AppDatabase extends GeneratedDatabase {
       ''');
     }
   }
+
+  Future<void> _createCounterTargetSchema() => customStatement('''
+    CREATE TABLE habit_counter_targets (
+      habit_version_id TEXT NOT NULL PRIMARY KEY
+        REFERENCES habit_versions(id) ON DELETE RESTRICT,
+      target_count INTEGER NOT NULL
+        CHECK (typeof(target_count) = 'integer' AND target_count > 0),
+      unit TEXT NOT NULL CHECK (length(trim(unit)) > 0)
+    )
+  ''');
 
   Future<String?> getSetting(String key) async {
     final row = await customSelect(

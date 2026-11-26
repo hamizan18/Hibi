@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; only the initial identity and effective-dated name schema is implemented, not the habit engine.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; identity, dated name versions and counter target storage exist, but the habit engine is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 2, including the settings table and initial habit identity/name-version schema; foreign keys enabled, injected executor, unsupported migrations rejected, and visible database initialization errors.
+- Riverpod and GoRouter; Drift/SQLite version 3, including settings, habit identity/name versions and counter target storage; foreign keys enabled, injected executor, unsupported migrations rejected, and visible database initialization errors.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -57,10 +57,19 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed, all 9 tests passed.
 - Migration tests used isolated local SQLite files, not the device's actual user database. Android-specific migration and full milestone acceptance remain unverified.
 
+### Milestone 1: typed counter target
+
+- Before changes, `git status --short --branch` reported a clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 9 tests.
+- Added `CounterTarget` and low-level `CounterTargetStore`, with positive whole counts and nonblank units. `habit_counter_targets` attaches one counter target to one habit version; existing unconfigured versions are not assigned values.
+- Schema version 3 explicitly migrates versions 1 and 2 transactionally. Tests verify retained settings and historical versions, absent targets after migration, persistence across reopening, rollback on migration failure, input validation and separate targets for two versions.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits test\counter_target_test.dart test\database_test.dart test\habit_schema_test.dart && flutter.bat test test\counter_target_test.dart test\habit_schema_test.dart test\database_test.dart"`: 10 tests passed.
+- `cmd.exe /c "dart.bat format lib\features\habits test\counter_target_test.dart && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting passed, analysis passed, all 13 tests passed.
+- Tests used isolated local databases. Android migration and integration tests were not run. User-facing counter creation, progress recording, correction and audit remain unimplemented.
+
 ## Limitations
 
-Database is not encrypted; privacy and backup features do not exist yet. Habit tracking, configuration targets, scheduling, lifecycle, audit, and correction workflows remain unimplemented; raw schema constraints do not by themselves prevent unauthorized historical edits. No release signing or final application ID has been configured.
+Database is not encrypted; privacy and backup features do not exist yet. Habit tracking, non-counter targets, scheduling, lifecycle, audit, and correction workflows remain unimplemented; the low-level target store and raw schema do not authorize historical edits. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design and implement typed, versioned target configuration for an initial tracking type, with explicit precision and tests; do not expose user-facing habit edits until transaction and historical correction protections exist.
+Design and implement transactional, audited habit-version creation and correction safeguards before connecting the low-level counter target store to user-facing edits.

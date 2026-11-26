@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 is in progress, with only initial database identity/name-version infrastructure implemented. Read AGENTS.md and the documents it lists before continuing.
+Milestone 0 is accepted. Milestone 1 remains in progress: identity, dated name versions and counter target storage exist, but habit tracking is not operational.
 
 ## Latest work
 
-Added version 2 habit identity and dated name-version schema, non-overlap triggers and a transactional migration from version 1. Changed `lib/core/database/app_database.dart`, `test/database_test.dart`, added `test/habit_schema_test.dart`, and updated schema, decisions, status and handoff documentation. No UI, production habit records or write API were added.
+Added `CounterTarget`, `CounterTargetStore`, schema version 3 with per-version counter targets, transactional 1→3/2→3 migration, and `test/counter_target_test.dart`. Updated the existing database and schema tests and affected documentation. No UI or production records were added.
 
 ## Decisions and constraints
 
-See DECISIONS.md and DATABASE_SCHEMA.md. Drift uses explicit SQL without code generation. Schema constraints do not implement correction authorization or immutable historical data; don't expose writes until those protections are implemented. Application ID `com.example.hibi` is a development placeholder; SQLite is not encrypted.
+See DECISIONS.md and DATABASE_SCHEMA.md. Counter targets are positive whole signed 64-bit integers with nonblank units, not floating point. Existing versions without a target stay unconfigured. The low-level store does not implement audit or correction authorization; do not expose edits until those protections exist. SQLite is not encrypted; `com.example.hibi` remains a development placeholder.
 
 ## Verification and blockers
 
-Before the change, analysis and 6 tests passed. After the change, `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, and all 9 `flutter test` tests passed. Migration, rollback, non-overlap and historical name lookup were exercised against isolated local databases. No Android migration test or integration test was run; Milestone 1 is incomplete.
+Before the change, analysis and all 9 tests passed. After the change, formatting, analysis and all 13 tests passed. Isolated local database tests cover migrations, rollback, counter validation, version-specific targets and reopening. Android migration and integration tests were not run. Milestone 1 is incomplete.
 
 ## Next bounded task
 
-Design and implement typed, versioned target configuration for an initial tracking type, with explicit precision and tests; preserve migration safety and do not expose historical edits without correction/audit protections.
+Design and implement transactional, audited habit-version creation and correction safeguards before connecting the counter target store to user-facing edits.
