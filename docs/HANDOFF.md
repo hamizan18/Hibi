@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: internal audited counter habit creation and strictly future version scheduling exist; habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal audited counter versions and counter occurrence/event schema exist, but habit tracking is not operational.
 
 ## Latest work
 
-Documented the proposed historical correction contract in ARCHITECTURE.md, acceptance scenarios in TEST_PLAN.md and ADR-010 in DECISIONS.md. Added a regression test for rejecting an out-of-order future version without altering existing history. No correction API, UI or schema change was implemented.
+Added schema version 5 for counter occurrences and progress events, validation and history-protection triggers, and `test/occurrence_schema_test.dart`. Updated old migration fixtures and documentation. No occurrence generation, status, event logging API, UI or production records were added.
 
 ## Decisions and constraints
 
-See ADR-010 and the planned design in ARCHITECTURE.md. Preview must bind to an exact affected read-set, require confirmation, reject stale snapshots and commit changes, audit and any implemented reconciliation atomically. The current schema lacks occurrences, event history and a representation preserving correction preimages. Audit is unencrypted and has no private-access or privacy-deletion controls.
+See ADR-011 and DATABASE_SCHEMA.md. Each occurrence references the matching applicable habit version and snapshots its counter target; one occurrence per habit/local date and multiple positive integer events are supported. Triggers guard historical interpretation, but do not enforce schedules, pauses, audit, privacy deletion or correction. Missing data is not success or failure. SQLite is unencrypted.
 
 ## Verification and blockers
 
-Before changes, analysis and all 17 tests passed. After adding the regression test, formatting, analysis and all 18 tests passed. No Android integration or migration test was run this session. The correction acceptance scenarios are a plan, not implemented or passed.
+Before changes, analysis and all 18 tests passed. After changes, `dart format .`, `flutter analyze` and all 21 tests passed. Isolated tests cover migrations, rollback, version applicability, snapshot consistency and multiple events. No Android migration or integration tests were run this session.
 
 ## Next bounded task
 
-Design and implement the occurrence and progress-event schema with a non-destructive migration and isolated tests, including unique occurrence dates and links to applicable versions. Keep correction and UI unavailable until prerequisites are verified.
+Implement and test a pure, clock-independent schedule applicability engine for anchored daily and selected-weekday schedules. Do not generate occurrences or expose UI until lifecycle and version applicability are integrated.

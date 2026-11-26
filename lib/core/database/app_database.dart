@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -40,16 +40,18 @@ class AppDatabase extends GeneratedDatabase {
       await _createHabitSchema();
       await _createCounterTargetSchema();
       await _createHabitAuditSchema();
+      await _createOccurrenceSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 3 || to != 4) {
+      if (from < 1 || from > 4 || to != 5) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
         if (from == 1) await _createHabitSchema();
         if (from <= 2) await _createCounterTargetSchema();
-        await _createHabitAuditSchema();
+        if (from <= 3) await _createHabitAuditSchema();
+        await _createOccurrenceSchema();
       });
     },
     beforeOpen: (details) async {
@@ -133,6 +135,99 @@ class AppDatabase extends GeneratedDatabase {
     await customStatement('''
       CREATE INDEX habit_version_audit_by_habit_time
       ON habit_version_audit (habit_id, occurred_at_utc_us)
+    ''');
+  }
+
+  Future<void> _createOccurrenceSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_occurrences (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        habit_version_id TEXT NOT NULL REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        target_count INTEGER NOT NULL
+          CHECK (typeof(target_count) = 'integer' AND target_count > 0),
+        unit TEXT NOT NULL CHECK (length(trim(unit)) > 0),
+        UNIQUE (habit_id, local_date)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_occurrences_by_version_date
+      ON habit_occurrences (habit_version_id, local_date)
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_occurrences_validate_insert
+      BEFORE INSERT ON habit_occurrences
+      WHEN NOT EXISTS (
+        SELECT 1 FROM habit_versions v
+        JOIN habit_counter_targets t ON t.habit_version_id = v.id
+        WHERE v.id = NEW.habit_version_id AND v.habit_id = NEW.habit_id
+          AND v.effective_start <= NEW.local_date
+          AND (v.effective_end IS NULL OR NEW.local_date < v.effective_end)
+          AND t.target_count = NEW.target_count AND t.unit = NEW.unit
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'occurrence does not match an applicable counter version');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_occurrences_protect_interpretation
+      BEFORE UPDATE OF id, habit_id, habit_version_id, local_date, target_count, unit
+      ON habit_occurrences
+      WHEN NEW.id IS NOT OLD.id OR NEW.habit_id IS NOT OLD.habit_id
+        OR NEW.habit_version_id IS NOT OLD.habit_version_id
+        OR NEW.local_date IS NOT OLD.local_date
+        OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit
+      BEGIN
+        SELECT RAISE(ABORT, 'occurrence correction workflow required');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_versions_protect_occurrences
+      BEFORE UPDATE OF id, habit_id, name, effective_start, effective_end ON habit_versions
+      WHEN EXISTS (
+        SELECT 1 FROM habit_occurrences o WHERE o.habit_version_id = OLD.id
+          AND (NEW.id IS NOT OLD.id OR NEW.habit_id IS NOT OLD.habit_id
+            OR NEW.name IS NOT OLD.name OR o.local_date < NEW.effective_start
+            OR (NEW.effective_end IS NOT NULL AND o.local_date >= NEW.effective_end))
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'version change would alter existing occurrences');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_counter_targets_protect_update
+      BEFORE UPDATE ON habit_counter_targets
+      WHEN EXISTS (SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id)
+        AND (NEW.habit_version_id IS NOT OLD.habit_version_id
+          OR NEW.target_count IS NOT OLD.target_count OR NEW.unit IS NOT OLD.unit)
+      BEGIN
+        SELECT RAISE(ABORT, 'target correction workflow required');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_counter_targets_protect_delete
+      BEFORE DELETE ON habit_counter_targets
+      WHEN EXISTS (SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id)
+      BEGIN
+        SELECT RAISE(ABORT, 'target is used by existing occurrences');
+      END
+    ''');
+    await customStatement('''
+      CREATE TABLE habit_counter_events (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL REFERENCES habit_occurrences(id) ON DELETE RESTRICT,
+        quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_counter_events_by_occurrence_time
+      ON habit_counter_events (occurrence_id, occurred_at_utc_us)
     ''');
   }
 

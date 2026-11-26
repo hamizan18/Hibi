@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 4 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 5 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -26,12 +26,24 @@ Schema version 4 is defined in `lib/core/database/app_database.dart` using expli
 | `habit_version_audit` | `previous_values` | TEXT | NULL or JSON snapshot before change |
 | `habit_version_audit` | `updated_values` | TEXT | NOT NULL, JSON snapshot after change |
 | `habit_version_audit` | `occurred_at_utc_us` | INTEGER | NOT NULL; UTC Unix microseconds |
+| `habit_occurrences` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
+| `habit_occurrences` | `habit_id` | TEXT | NOT NULL, foreign key to `habits(id)`, ON DELETE RESTRICT; unique with `local_date` |
+| `habit_occurrences` | `habit_version_id` | TEXT | NOT NULL, foreign key to `habit_versions(id)`, ON DELETE RESTRICT |
+| `habit_occurrences` | `local_date` | TEXT | NOT NULL, valid ISO local date; unique with `habit_id` |
+| `habit_occurrences` | `target_count` | INTEGER | NOT NULL, positive integer snapshot matching the applicable counter version on insert |
+| `habit_occurrences` | `unit` | TEXT | NOT NULL, nonblank snapshot matching that version on insert |
+| `habit_counter_events` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
+| `habit_counter_events` | `occurrence_id` | TEXT | NOT NULL, foreign key to `habit_occurrences(id)`, ON DELETE RESTRICT |
+| `habit_counter_events` | `quantity` | INTEGER | NOT NULL, positive integer; multiple events per occurrence |
+| `habit_counter_events` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
 
-The settings and identity primary keys and per-habit revision constraint have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open intervals for the same habit, including unbounded ends. Dates must be real calendar dates in `YYYY-MM-DD` with years 0001–9999. The database enables `PRAGMA foreign_keys = ON` per connection. Migrations from versions 1, 2 and 3 to 4 add missing tables transactionally without replacing existing settings or versions. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
+The settings and identity primary keys and per-habit revision/occurrence uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 4 to 5 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
 
 Counter targets are linked to a specific habit version; the row's presence identifies a counter configuration. Counts use exact positive whole units in the signed SQLite 64-bit integer range (1 to 9223372036854775807), without fractions or floating point; decimal measurements need a separate precision design. `CounterTarget` additionally trims whitespace and rejects blank units. Existing versions without target rows remain explicitly unconfigured: migration never guesses a type, target or unit.
 
-The internal `CounterHabitWriter` creates an initial version and appends strictly future versions transactionally with their target and an audit snapshot. It rejects backdated creation, same-day changes, backdated changes, and appending before the latest existing start. It is not connected to UI. Historical correction preview, confirmation, audit access controls, derived-data recalculation, lifecycle, other tracking types, occurrence logging and the complete habit engine remain unimplemented. The low-level target store and direct SQL bypass this writer and are not authorization to modify history. Audit contains habit names, units and targets in unencrypted local storage; it is not tamper-proof and no private-view access control or privacy deletion workflow exists yet. No user habits or production records are seeded.
+Occurrence insertion requires a matching habit, applicable version interval, and matching counter target snapshot. Triggers reject occurrence interpretation changes, target changes/deletion when occurrences reference the version, and version changes that would invalidate an existing occurrence or change its name. A version end may still change when all referenced occurrences remain in range. These restrictions do not implement a correction workflow or permanent privacy deletion; those workflows require an explicit future design and migration.
+
+The schema has no status, schedule, lifecycle or occurrence generator: a missing row or missing event must not be interpreted as a failure or success. Event insertion alone is not an audited user-facing logging workflow. Direct SQL can bypass application-level auditing; the schema does not validate recurrence, pause periods, time-zone context for event input, or the aggregate sum. There is no correction preview, audit access control, derived-data recalculation or UI. Counter snapshots, events and audit contain personal data in unencrypted local storage; privacy access and deletion are not implemented. No production records are seeded.
 
 ## Planned logical domains (not implemented schema)
 

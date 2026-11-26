@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal counter version creation and future scheduling with audit exist, but the habit engine is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal audited counter versions and counter occurrence/event schema exist, but the habit engine is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 4, including settings, habit identity, name versions, counter target storage and habit-version audit; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 5, including settings, habit identity, versioned counter targets, audit, counter occurrences and events; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -83,10 +83,19 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format test\counter_habit_writer_test.dart && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting passed, analysis passed and all 18 tests passed.
 - Current schema lacks occurrences, events and historical preimage representation; correction preview, confirmation, derived recalculation and UI remain unavailable. No Android integration or migration test was run this session.
 
+### Milestone 1: counter occurrence and event schema
+
+- At session start `git status --short --branch` showed a clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 18 tests.
+- Added `habit_occurrences` and `habit_counter_events`, unique habit/local-date occurrences, applicable-version and target-snapshot validation, multiple positive integer progress events, and guards against invalidating existing occurrence interpretations.
+- Version 5 migrations from versions 1–4 are transactional. Isolated tests cover version-4 preservation and reopen, rollback on migration failure, cross-habit and out-of-date version rejection, duplicate dates, invalid inputs, multiple events and a valid boundary update.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart test && flutter.bat test test\occurrence_schema_test.dart test\database_test.dart test\habit_schema_test.dart test\counter_target_test.dart test\counter_habit_writer_test.dart"`: 18 tests passed.
+- `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and all 21 tests passed.
+- No production data was inserted. Schema tests used isolated local databases; Android migration and integration tests were not run. No schedule engine, occurrence generator, status engine, audited event logging or UI exists.
+
 ## Limitations
 
-Database and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Habit UI, counter logging, scheduling, lifecycle and historical correction preview, confirmation and recalculation are not implemented. Raw SQL and the low-level target store bypass the writer's safeguards. No release signing or final application ID has been configured.
+Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Scheduling, occurrence generation, status and audited logging are not implemented: missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion and require an explicit future migration for those workflows. Raw SQL bypasses application-level audit. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design and implement the occurrence and progress-event schema with a non-destructive migration and isolated tests, including unique occurrence dates and links to applicable versions; keep correction and UI unavailable until their prerequisites are verified.
+Implement and test a pure, clock-independent schedule applicability engine for anchored daily and selected-weekday schedules; do not generate occurrences or expose UI until lifecycle and version applicability are integrated.
