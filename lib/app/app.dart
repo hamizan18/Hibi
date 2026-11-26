@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import '../core/database/app_database.dart';
 import '../core/services/app_clock.dart';
+import '../features/habits/domain/habit_schedule.dart';
 import '../features/habits/presentation/habit_builder_screen.dart';
+import '../features/habits/presentation/today_habit_roster.dart';
 import 'theme/hibi_theme.dart';
 
 const _destinations = [
@@ -86,6 +88,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
     with WidgetsBindingObserver {
   Timer? _midnightTimer;
   late DateTime _now;
+  int _rosterRevision = 0;
 
   @override
   void initState() {
@@ -97,6 +100,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
   void _refreshDate() {
     _midnightTimer?.cancel();
     _now = ref.read(appClockProvider).now().toLocal();
+    _rosterRevision++;
     final nextDay = DateTime(_now.year, _now.month, _now.day + 1);
     _midnightTimer = Timer(nextDay.difference(_now), () {
       if (mounted) setState(_refreshDate);
@@ -153,7 +157,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                     const SizedBox(height: 8),
                     Text(
                       widget.index == 0
-                          ? 'Create a habit to get started. Logging is not available yet. Your data stays on this device.'
+                          ? 'Your habits stay on this device.'
                           : widget.index == 4
                           ? 'Create a habit below. Other features are not available yet.'
                           : 'This section is planned for a future milestone.',
@@ -162,10 +166,20 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                 ),
               ),
             ),
+            if (widget.index == 0) ...[
+              const SizedBox(height: 16),
+              TodayHabitRoster(
+                key: ValueKey(_rosterRevision),
+                date: LocalDate(_now.year, _now.month, _now.day),
+              ),
+            ],
             if (widget.index == 0 || widget.index == 4) ...[
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => context.push('/habit-builder'),
+                onPressed: () async {
+                  await context.push('/habit-builder');
+                  if (mounted) setState(() => _rosterRevision++);
+                },
                 icon: const Icon(Icons.add),
                 label: const Text('Create habit'),
               ),

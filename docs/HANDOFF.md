@@ -2,11 +2,11 @@
 
 ## Current state
 
-Milestone 0 is accepted; Milestone 1 remains in progress. The Habit Builder is reachable from Today and More; daily logging, lifecycle/recovery controls, historical correction UI and milestone-wide Android verification remain incomplete.
+Milestone 0 is accepted; Milestone 1 remains in progress. Today includes current-day logging, dated counter lifecycle controls and prior-date recovery for eligible counter and checklist records. Non-counter lifecycle controls, historical correction UI and milestone-wide Android verification remain incomplete.
 
 ## Latest work
 
-Added `habit_creation_audit.dart` and integrated it into the checklist, avoidance, boolean/duration and measurement/time/range services. Their seven non-counter types now write creation snapshots in the same transaction as configuration, schedule, lifecycle and metadata. No schema or public creation API changed. `test/non_counter_creation_audit_test.dart` covers snapshots, rollback and disk reopen without inventing audits for legacy records.
+Added `counter_lifecycle_controls.dart`, `counter_recovery_controls.dart`, `checklist_recovery_controls.dart`, and transactional counter/checklist recovery eligibility services. Today shows controls for visible habits and keeps private historical recovery details hidden until explicitly revealed. Archive/soft-delete require confirmation; lifecycle dates must respect the append-only history. Updated roster refresh to preserve other widgets while reloading. No schema change.
 
 ## Decisions and constraints
 
@@ -14,13 +14,15 @@ See ADR-037 through ADR-046 and BUSINESS_RULES.md. Historical counter target cor
 
 ## Verification and blockers
 
-At session start, `cmd.exe /c "flutter.bat test test/habit_builder_screen_test.dart test/foundation_test.dart"` passed 10 baseline tests. `cmd.exe /c "flutter.bat analyze && flutter.bat test test/non_counter_creation_audit_test.dart test/checklist_habit_test.dart test/avoidance_habit_test.dart test/boolean_duration_habit_test.dart test/measurement_time_range_habit_test.dart test/habit_builder_screen_test.dart"` passed analysis and 32 tests. A subsequent six-file format check passed and `flutter.bat test test/non_counter_creation_audit_test.dart` passed all 22 audit tests; exact format command is in PROGRESS.md. Tests used injected clocks and isolated databases.
+At session start, `cmd.exe /c "flutter.bat test test/today_habit_roster_test.dart test/counter_today_card_test.dart test/checklist_avoidance_today_cards_test.dart"` passed 10 tests. After implementation, `flutter.bat analyze` and the four targeted control/roster test files passed 20 tests, with a nine-file format check unchanged. Full commands and intermediate lint/test fixture failures are recorded in PROGRESS.md. Tests use isolated databases and injected clocks.
 
-Android integration and device migration tests were not run in this session. The previous session's isolated Android test build could not be installed because the device rejected installation with `INSTALL_FAILED_USER_RESTRICTED`.
+Historical recovery eligibility is checked against the original version, current active lifecycle and explicit item/habit flags inside the write transaction; absent metadata remains ineligible. Private historical values are hidden unless explicitly revealed. Lower-level recovery writers alone do not enforce all these UI eligibility checks.
 
-Creation snapshots are unencrypted and contain sensitive configuration. Legacy non-counter habits created before this change still lack a creation snapshot; no values were invented to backfill them. Counter creation's existing audit format is unchanged.
+Android visual, integration and device migration tests were not run in this session. The previous isolated Android installation was rejected with `INSTALL_FAILED_USER_RESTRICTED`; this rejection was not bypassed or repeated.
+
+Private visibility is not authentication, and SQLite is unencrypted. Duration timers remain screen-local and may be discarded on navigation, background/resume, visibility changes or midnight. Legacy records without recovery metadata cannot be recovered through these controls.
 
 
 ## Next bounded task
 
-Implement the Today habit roster and current-day logging UI using existing services, preserving pending/unknown states and not fabricating occurrences.
+Implement dated lifecycle controls for non-counter habits with semantic precondition checks and tests, preserving historical progress and existing transition restrictions.

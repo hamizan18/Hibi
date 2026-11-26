@@ -1,6 +1,8 @@
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hibi/app/app.dart';
+import 'package:hibi/core/database/app_database.dart';
 import 'package:hibi/core/services/app_clock.dart';
 
 class FakeClock implements AppClock {
@@ -15,9 +17,12 @@ void main() {
   });
 
   testWidgets('navigates between clearly unavailable sections', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           appClockProvider.overrideWithValue(FakeClock()),
           databaseInitializationProvider.overrideWith((ref) async {}),
         ],
@@ -36,9 +41,12 @@ void main() {
   });
 
   testWidgets('opens habit builder from Today and More', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          databaseProvider.overrideWithValue(db),
           appClockProvider.overrideWithValue(FakeClock()),
           databaseInitializationProvider.overrideWith((ref) async {}),
         ],

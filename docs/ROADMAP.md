@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress. Its Habit Builder and optional starter templates are available, while logging and other habit-management UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress. Habit Builder, optional starter templates and current-day Today logging are available; other habit-management UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

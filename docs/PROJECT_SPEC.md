@@ -4,9 +4,9 @@ Hibi (日々), “Small steps, every day.” / “小さな一歩、毎日。”
 
 ## Scope and status
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress with dated counter, checklist, avoidance, boolean, duration, measurement, time-of-day and range tracking engines, version-scoped metadata (category, symbol, priority, privacy, ordering), daily/weekday/interval/monthly/one-time schedules, all four optional editable starter templates (`Self Control` / `O`, `Quran Reading` / `N`, `Daily Prayers` / `S`, `Push Up` / `P`), historical counter target correction preview/confirm/audit with preimage preservation, multi-habit counter dashboard and overview readers, and Riverpod service providers. User-facing habit tracking UI is not operational. The roadmap describes future functionality: dynamic habits and historical configuration, history and analytics, finance, journal and mood, goals and focus, gamification, privacy, reminders, backups and exports. Hide or clearly label unfinished functionality. Starter templates are optional and editable, never automatically populated user records. No real history, financial records, incidents or religious activity may be fabricated.
+Milestone 0 foundation acceptance is verified; Milestone 1 remains in progress. The habit engine supports counter, checklist, avoidance, boolean, duration, measurement, time-of-day and range tracking, dated configuration, schedules, optional templates and internal counter correction. The roadmap describes future history and analytics, finance, journal and mood, goals and focus, gamification, privacy, reminders, backups and exports. Hide or clearly label unfinished functionality. Starter templates are optional and editable, never automatically populated user records. No real history, financial records, incidents or religious activity may be fabricated.
 
-The Habit Builder is available from Today and More for creating new habits and optionally customizing starter templates. Daily logging and other habit-management screens remain unavailable.
+The Habit Builder is available from Today and More. Today supports current-day logging for all eight tracking types, dated lifecycle controls for counter habits and prior-date recovery for eligible counter and checklist records. Other lifecycle controls and historical correction UI remain unavailable.
 
 ## Boundaries
 
