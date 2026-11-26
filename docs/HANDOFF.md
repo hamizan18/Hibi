@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: internal initial and future counter-version writes require explicit schedules, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal same-day counter resolution supports explicit failed/excused states, but habit tracking is not operational.
 
 ## Latest work
 
-Updated `lib/features/habits/data/counter_habit_writer.dart` so future versions atomically persist an explicit schedule and before/after schedule audit, and reject schedules that end on or before the version starts. Updated `test/counter_habit_writer_test.dart` callers; added `test/counter_habit_future_schedule_test.dart` for history, audit, missing legacy schedules and rollback. Updated BUSINESS_RULES, DATABASE_SCHEMA, DECISIONS, SECURITY_PRIVACY, PROJECT_SPEC, ROADMAP, PROGRESS and HANDOFF. No schema migration, UI, occurrence generation or production data was added.
+Added `lib/features/habits/data/counter_resolution.dart`, schema version 9 in `lib/core/database/app_database.dart`, and `test/counter_resolution_test.dart`. Updated `counter_day_reader.dart` to expose the resolution, `counter_progress_writer.dart` to reject further progress after resolution, and prior migration fixtures to expect version 9. Updated ARCHITECTURE, BUSINESS_RULES, DATABASE_SCHEMA, DECISIONS, SECURITY_PRIVACY, PROJECT_SPEC, ROADMAP, PROGRESS and HANDOFF. No UI, historical correction, recovery or production data was added.
 
 ## Decisions and constraints
 
-See ADR-016 and BUSINESS_RULES.md. Previous schedules are never copied or inferred; absent legacy schedules are captured as null. Existing occurrence/version guards continue to reject reinterpretation. Database, lifecycle reasons and audit details remain unencrypted; direct SQL and low-level stores bypass application-level safeguards.
+See ADR-021 and BUSINESS_RULES.md. A single immutable resolution creation record per occurrence is also its audit snapshot, with optional sensitive reason and target/progress at the decision. The internal writer accepts only incomplete, applicable current-day occurrences; subsequent progress and resolution changes are rejected. Direct SQL can bypass application consistency checks; resolution triggers require a future correction/privacy-deletion design. SQLite is unencrypted.
 
 ## Verification and blockers
 
-At session start existing uncommitted user changes were present and preserved. `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and 40 tests before changes. `cmd.exe /c "dart.bat format lib\features\habits\data\counter_habit_writer.dart test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart && flutter.bat test test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart"` passed 9 targeted tests. `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"` passed formatting, analysis and all 44 tests. Tests used isolated databases; no Android or integration test was run.
+Existing uncommitted user changes were present and preserved. Before changes `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and 66 tests. The first format/analyze/test command stopped at analysis on a missing-braces lint; after fixing it, `cmd.exe /c "dart.bat format lib\features\habits\data\counter_resolution.dart && flutter.bat analyze && flutter.bat test"` passed analysis and all 71 tests. After adding a migration rollback test, `cmd.exe /c "dart.bat format test\counter_resolution_test.dart && flutter.bat analyze && flutter.bat test test\counter_resolution_test.dart"` passed analysis and all 6 targeted tests. Isolated databases were used; Android migration and integration tests were not run.
 
 ## Next bounded task
 
-Implement an internal, transactional, idempotent counter occurrence retrieval/creation path for a requested local date, using applicability and the correct version/target snapshot; explicitly preserve unknown and not-applicable outcomes. Test repeated requests, version boundaries, pauses and existing data; do not expose UI or infer completion/failure.
+Implement a read-only counter-day effective-status interpretation that combines applicability, missing occurrence, recorded progress and explicit resolution without hiding contradictory historical data; test unknown/not-applicable and no-record cases. Do not add UI or infer failure.

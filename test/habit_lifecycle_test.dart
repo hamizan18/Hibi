@@ -252,6 +252,8 @@ void main() {
           .insert('v', DailySchedule(start: LocalDate(2026, 11, 1)));
       await original.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_counter_resolutions');
+      legacy.execute('DROP TABLE habit_counter_event_audit');
       legacy.execute('DROP TABLE habit_lifecycle_events');
       legacy.execute('PRAGMA user_version = 6');
       legacy.close();
@@ -265,7 +267,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        7,
+        9,
       );
       await HabitLifecycleStore(migrated, FixedClock()).append(
         id: 'a',

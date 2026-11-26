@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 7 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 9 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -36,6 +36,17 @@ Schema version 7 is defined in `lib/core/database/app_database.dart` using expli
 | `habit_counter_events` | `occurrence_id` | TEXT | NOT NULL, foreign key to `habit_occurrences(id)`, ON DELETE RESTRICT |
 | `habit_counter_events` | `quantity` | INTEGER | NOT NULL, positive integer; multiple events per occurrence |
 | `habit_counter_events` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
+| `habit_counter_event_audit` | `event_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_counter_events(id)`, ON DELETE RESTRICT |
+| `habit_counter_event_audit` | `occurrence_id` | TEXT | NOT NULL, foreign key to `habit_occurrences(id)`, ON DELETE RESTRICT; occurrence snapshot |
+| `habit_counter_event_audit` | `quantity` | INTEGER | NOT NULL, positive integer creation snapshot |
+| `habit_counter_event_audit` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds at creation |
+| `habit_counter_resolutions` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
+| `habit_counter_resolutions` | `occurrence_id` | TEXT | NOT NULL, UNIQUE, foreign key to `habit_occurrences(id)`, ON DELETE RESTRICT |
+| `habit_counter_resolutions` | `state` | TEXT | NOT NULL, `failed` or `excused` |
+| `habit_counter_resolutions` | `reason` | TEXT | NULL or user-provided reason |
+| `habit_counter_resolutions` | `target_count` | INTEGER | NOT NULL, positive integer snapshot |
+| `habit_counter_resolutions` | `progress_total` | INTEGER | NOT NULL, integer from zero to strictly below target |
+| `habit_counter_resolutions` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
 | `habit_schedules` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_versions(id)`, ON DELETE RESTRICT |
 | `habit_schedules` | `recurrence` | TEXT | NOT NULL, `daily` or `weekdays` |
 | `habit_schedules` | `start_date` | TEXT | NOT NULL, valid ISO date; inclusive anchor |
@@ -49,7 +60,7 @@ Schema version 7 is defined in `lib/core/database/app_database.dart` using expli
 | `habit_lifecycle_events` | `reason` | TEXT | NULL or local user-provided reason |
 | `habit_lifecycle_events` | `created_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
 
-The settings and identity primary keys and per-habit revision/occurrence/lifecycle-date uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 6 to 7 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
+The settings and identity primary keys and per-habit revision/occurrence/lifecycle-date uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 8 to 9 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
 
 Counter targets are linked to a specific habit version; the row's presence identifies a counter configuration. Counts use exact positive whole units in the signed SQLite 64-bit integer range (1 to 9223372036854775807), without fractions or floating point; decimal measurements need a separate precision design. `CounterTarget` additionally trims whitespace and rejects blank units. Existing versions without target rows remain explicitly unconfigured: migration never guesses a type, target or unit.
 
@@ -59,7 +70,15 @@ Occurrence insertion requires a matching habit, applicable version interval, and
 
 `HabitLifecycleStore` records effective-dated transitions with previous/new state, optional reason and UTC creation time, using a transaction and an injected clock. Its internal append path validates transition order and disallows backdating or two events on the same date. Database triggers reject event updates/deletes and insertion that could reinterpret existing later occurrences; direct SQL can still bypass the store's transition validation. Existing habits receive no inferred events. `HabitApplicabilityReader` combines the latest applicable lifecycle event, effective version and stored schedule; it returns `unknown` for missing necessary data, rather than guessing. See BUSINESS_RULES.md for boundaries.
 
-Internal counter creation writes the identity, initial version, target, explicitly supplied schedule, initial active lifecycle event and creation audit atomically. The lifecycle event becomes effective on the selected start date, including future starts; no separate scheduled event is inserted. A future-version append atomically closes the prior version, inserts its successor and explicit schedule, and audits both schedules; a missing prior schedule is recorded as null, not inferred. The schema has no status or occurrence generator: missing data must not be interpreted as success or failure. The stores are not integrated with notifications or UI and do not implement historical correction. Lifecycle reasons and audit/occurrence data may contain personal information and are unencrypted. Lifecycle trigger restrictions must be addressed explicitly in future audited correction and privacy-deletion workflows. No production records are seeded.
+Schema version 8 adds `habit_counter_event_audit`; migration from versions 1–7 preserves existing events and does not invent audit records for them. The internal counter writer inserts each event and its creation snapshot in one transaction. Its ordinary API only appends; direct SQL is not protected against update/delete of event or audit rows and can bypass the writer. The event ID is the audit primary key, identifying one creation snapshot per event. The snapshot and source event are unencrypted.
+
+Counter progress is derived on demand from `habit_occurrences.target_count` and `habit_counter_events.quantity`; the reader does not persist a status or modify events. It reads the target snapshot and events together, so later versions do not change an earlier occurrence's target. Missing occurrences return no result, and invalid/overflowing totals fail rather than being silently adjusted.
+
+The internal counter-day view reads lifecycle/schedule applicability and any matching occurrence/progress in one transaction; it does not write rows or create a pending occurrence. Its applicability result is independent of the optional historical occurrence and does not validate a missing counter target.
+
+Schema version 9 adds immutable counter resolution creation records, serving as their own local audit snapshots. The database rejects resolution updates/deletes; internal writers enforce applicability, current local date and progress consistency. One resolution exists per occurrence. Internal progress writes reject resolved occurrences, but direct SQL can bypass progress and resolution consistency checks. Migration from earlier versions creates no resolutions. Future correction and permanent privacy deletion require an explicit design.
+
+Internal counter creation writes the identity, initial version, target, explicitly supplied schedule, initial active lifecycle event and creation audit atomically. The lifecycle event becomes effective on the selected start date, including future starts; no separate scheduled event is inserted. A future-version append atomically closes the prior version, inserts its successor and explicit schedule, and audits both schedules; a missing prior schedule is recorded as null, not inferred. An internal on-demand occurrence store checks applicability and counter target within a transaction and preserves existing records, without setting a status or writing progress. The stores are not integrated with notifications or UI and do not implement historical correction. Lifecycle reasons and audit/occurrence data may contain personal information and are unencrypted. Lifecycle trigger restrictions must be addressed explicitly in future audited correction and privacy-deletion workflows. No production records are seeded.
 
 ## Planned logical domains (not implemented schema)
 

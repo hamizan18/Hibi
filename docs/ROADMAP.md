@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Internal initial counter creation and future-version writes commit explicit schedules and audit together; operational tracking and historical correction workflows do not yet exist. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Internal counter workflows include versioned schedules, same-day progress and explicit failed/excused resolution; operational tracking and historical correction workflows do not yet exist. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

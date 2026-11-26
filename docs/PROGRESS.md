@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal initial and future counter versions now require explicit schedules, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal same-day counter resolution supports explicit failed/excused states, but habit tracking is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 7, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences/events and lifecycle history; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 9, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences/events, explicit resolutions and lifecycle history; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -135,10 +135,52 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: 22 files unchanged, analysis passed and all 44 tests passed.
 - Isolated tests cover version boundaries, historical occurrence and schedule preservation, audit snapshots, absent legacy schedules, rejected expired schedules and rollback for schedule/audit failure or a conflicting occurrence. Android and integration tests were not run; no schema migration or production data was added.
 
+### Milestone 1: on-demand counter occurrences
+
+- At session start `git status --short --branch` showed a clean `main...origin/main`. Before changes, `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 44 tests.
+- Added `CounterOccurrenceStore`: an explicit local-date request transactionally evaluates lifecycle and schedule, returns an existing occurrence and snapshot unchanged, or inserts one for an applicable counter with a known target. Missing configuration remains unknown; no progress or status is inferred.
+- `cmd.exe /c "dart.bat format lib\features\habits\data\counter_occurrence_store.dart test\counter_occurrence_store_test.dart && flutter.bat analyze && flutter.bat test test\counter_occurrence_store_test.dart"`: formatting and analysis passed; 5 targeted tests passed.
+- After adding a same-database concurrent-request test, `cmd.exe /c "dart.bat format lib\features\habits\data\counter_occurrence_store.dart test\counter_occurrence_store_test.dart && flutter.bat analyze && flutter.bat test"`: formatting and analysis passed; all 50 tests passed.
+- Isolated tests cover repeated and concurrent requests on one database instance, version/target boundaries, paused and unscheduled dates, unknown legacy data, preservation of existing history, missing target and database reopen. Independent concurrent SQLite connections and Android/integration tests were not tested. No schema migration, background job, UI or production data was added.
+
+### Milestone 1: audited counter progress
+
+- At session start `git status --short --branch` showed existing modified documentation and untracked occurrence implementation/tests; these were preserved. Before changes, `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 50 tests.
+- Added `CounterProgressWriter`, which appends multiple positive same-day counter events and matching audit snapshots atomically with one injected UTC timestamp. It refuses unknown/not-applicable, past/future, duplicate-ID and overflow writes. Schema version 8 migrates older versions without inventing audit history.
+- Updated prior migration fixtures to represent their original schemas and expect version 8.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits\data\counter_progress_writer.dart test && flutter.bat analyze && flutter.bat test"`: formatting and analysis passed; all 54 tests passed.
+- After adding overflow and failed-v7-migration tests, `cmd.exe /c "dart.bat format test\counter_progress_writer_test.dart && flutter.bat analyze && flutter.bat test test\counter_progress_writer_test.dart"`: formatting and analysis passed; all 6 targeted tests passed.
+- After adding an existing-occurrence/unknown-applicability regression, `cmd.exe /c "dart.bat format test\counter_progress_writer_test.dart && flutter.bat test test\counter_progress_writer_test.dart"`: formatting completed and all 7 targeted tests passed.
+- Tests used isolated databases; Android migration and integration tests were not run. No UI, correction workflow or production data was added.
+
+### Milestone 1: counter progress calculation
+
+- At session start `git status --short --branch` showed existing modified documentation, database and tests plus untracked occurrence/progress files; these were preserved. `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 57 tests before changes.
+- Added pure `CounterProgress` and read-only `CounterProgressReader`: no events means pending, positive progress below the occurrence's target means partial, and target met or exceeded means completed. The actual total is retained; missing occurrences return no result. Invalid quantities and signed 64-bit overflow are rejected. The result does not resolve applicability or explicit statuses.
+- `cmd.exe /c "dart.bat format lib\features\habits\domain\counter_progress.dart lib\features\habits\data\counter_progress_reader.dart test\counter_progress_test.dart && flutter.bat analyze && flutter.bat test test\counter_progress_test.dart"`: formatting and analysis passed; all 5 targeted tests passed. Tests include 2 + 3 against target 5, historical target after version changes, no writes on reads and overflow from preexisting events.
+- Isolated databases were used. Android and integration tests were not run. No schema migration, UI, historical correction or production data was added.
+
+### Milestone 1: counter-day read composition
+
+- At session start `git status --short --branch` showed existing modified documentation, database/tests and untracked counter files; these were preserved. Before changes `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 62 tests.
+- Added `CounterDayReader`, composing schedule/lifecycle applicability with any existing occurrence and recorded progress in one read transaction. A missing occurrence stays absent even on an applicable date; existing records remain visible for unknown/not-applicable dates. Applicability alone does not prove a missing counter target is configured.
+- `cmd.exe /c "dart.bat format lib\features\habits\data\counter_day_reader.dart test\counter_day_reader_test.dart && flutter.bat analyze && flutter.bat test test\counter_day_reader_test.dart"` passed analysis and 4 tests; Drift printed a multiple-database warning in a test using two independent in-memory databases.
+- After changing the fixture to use one database, `cmd.exe /c "dart.bat format test\counter_day_reader_test.dart && flutter.bat analyze && flutter.bat test test\counter_day_reader_test.dart"` passed analysis and all 4 targeted tests without that warning. Tests cover no writes, unknown and missing data, pre-start/unscheduled/paused dates, historical targets and existing records.
+- Tests used isolated databases. Android and integration tests were not run. No schema migration, UI, correction workflow or production data was added.
+
+### Milestone 1: explicit counter resolution
+
+- At session start `git status --short --branch` showed modified documentation/database/tests and untracked counter files; these user changes were preserved. `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 66 tests before changes.
+- Added schema version 9 and an immutable resolution record containing state, optional reason, occurrence, target/progress snapshot and UTC creation time. `CounterResolutionWriter` accepts only existing applicable current-day occurrences with incomplete progress; `CounterDayReader` exposes the resolution and the progress writer rejects subsequent events. No missing record is marked failed.
+- Updated prior migration fixtures to represent their original schemas and expect version 9.
+- First `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits\data\counter_day_reader.dart lib\features\habits\data\counter_progress_writer.dart lib\features\habits\data\counter_resolution.dart test && flutter.bat analyze && flutter.bat test"` stopped at analysis on one missing-braces lint; fixed it. `cmd.exe /c "dart.bat format lib\features\habits\data\counter_resolution.dart && flutter.bat analyze && flutter.bat test"` then passed analysis and all 71 tests.
+- After adding a failed-v8-migration rollback test, `cmd.exe /c "dart.bat format test\counter_resolution_test.dart && flutter.bat analyze && flutter.bat test test\counter_resolution_test.dart"` passed analysis and all 6 targeted tests. Tests use isolated databases and cover both resolution states, duplicates, completed and unknown data, event rejection, rollback, migration preservation and reopen.
+- Android migration and integration tests were not run. No UI, historical correction, recovery or production data was added.
+
 ## Limitations
 
-Database, occurrence data, lifecycle reasons and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Lifecycle, notifications, occurrence generation, status and UI are not integrated into an operational habit workflow. Missing rows or events do not establish success or failure. Schema guards do not implement historical correction or permanent privacy deletion. Raw SQL and low-level stores bypass transition/audit safeguards. No release signing or final application ID has been configured.
+Database, occurrence data, lifecycle reasons and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Counter logging and explicit resolution are internal and restricted to the current local date; changing a resolution or recording further progress requires a future correction workflow. Recovery, notifications and UI are not implemented. Raw SQL can bypass writer checks and modify event records. Immutable resolution triggers require an explicit future privacy-deletion/correction design. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Implement an internal, transactional, idempotent counter occurrence retrieval/creation path for a requested local date, using applicability and the correct version/target snapshot; explicitly preserve unknown and not-applicable outcomes. Test repeated requests, version boundaries, pauses and existing data; do not expose UI or infer completion/failure.
+Implement a read-only counter-day effective-status interpretation that combines applicability, missing occurrence, recorded progress and explicit resolution without hiding contradictory historical data; test unknown/not-applicable and no-record cases. Do not add UI or infer failure.

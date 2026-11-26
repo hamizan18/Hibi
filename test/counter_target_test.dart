@@ -70,6 +70,8 @@ void main() {
       );
       await original.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_counter_resolutions');
+      legacy.execute('DROP TABLE habit_counter_event_audit');
       legacy.execute('DROP TABLE habit_lifecycle_events');
       legacy.execute('DROP TABLE habit_schedules');
       legacy.execute('DROP TABLE habit_counter_events');
@@ -93,7 +95,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        7,
+        9,
       );
       await CounterTargetStore(migrated)
           .insert('v1', CounterTarget(count: 5, unit: 'pages'));

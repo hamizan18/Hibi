@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -43,10 +43,12 @@ class AppDatabase extends GeneratedDatabase {
       await _createOccurrenceSchema();
       await _createScheduleSchema();
       await _createLifecycleSchema();
+      await _createCounterEventAuditSchema();
+      await _createCounterResolutionSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 6 || to != 7) {
+      if (from < 1 || from > 8 || to != 9) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -55,7 +57,9 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 3) await _createHabitAuditSchema();
         if (from <= 4) await _createOccurrenceSchema();
         if (from <= 5) await _createScheduleSchema();
-        await _createLifecycleSchema();
+        if (from <= 6) await _createLifecycleSchema();
+        if (from <= 7) await _createCounterEventAuditSchema();
+        await _createCounterResolutionSchema();
       });
     },
     beforeOpen: (details) async {
@@ -332,6 +336,38 @@ class AppDatabase extends GeneratedDatabase {
         BEFORE $operation ON habit_lifecycle_events
         BEGIN
           SELECT RAISE(ABORT, 'lifecycle correction workflow required');
+        END
+      ''');
+    }
+  }
+
+  Future<void> _createCounterEventAuditSchema() => customStatement('''
+    CREATE TABLE habit_counter_event_audit (
+      event_id TEXT NOT NULL PRIMARY KEY REFERENCES habit_counter_events(id) ON DELETE RESTRICT,
+      occurrence_id TEXT NOT NULL REFERENCES habit_occurrences(id) ON DELETE RESTRICT,
+      quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+      occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+    )
+  ''');
+
+  Future<void> _createCounterResolutionSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_counter_resolutions (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL UNIQUE REFERENCES habit_occurrences(id) ON DELETE RESTRICT,
+        state TEXT NOT NULL CHECK (state IN ('failed', 'excused')),
+        reason TEXT,
+        target_count INTEGER NOT NULL CHECK (typeof(target_count) = 'integer' AND target_count > 0),
+        progress_total INTEGER NOT NULL CHECK (typeof(progress_total) = 'integer' AND progress_total >= 0 AND progress_total < target_count),
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_counter_resolutions_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_counter_resolutions
+        BEGIN
+          SELECT RAISE(ABORT, 'resolution correction workflow required');
         END
       ''');
     }
