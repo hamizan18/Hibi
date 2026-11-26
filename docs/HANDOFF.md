@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: internal counter data infrastructure and pure daily/weekday recurrence evaluation exist, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal counter data infrastructure and daily/weekday recurrence evaluation and low-level persistence exist, but habit tracking is not operational.
 
 ## Latest work
 
-Added `lib/features/habits/domain/habit_schedule.dart` and `test/habit_schedule_test.dart`. The pure evaluator supports anchored daily and selected-weekday recurrence with optional exclusive end and validated calendar dates. No database, occurrence generation or UI was changed. Updated BUSINESS_RULES.md, DECISIONS.md, PROJECT_SPEC.md, ROADMAP.md, DATABASE_SCHEMA.md, PROGRESS.md and this handoff.
+Added schema version 6, `HabitScheduleStore`, and `test/habit_schedule_store_test.dart`. Updated existing migration fixtures and schema/business/decision/status documentation. No UI, production data, occurrence generation or lifecycle behavior was added.
 
 ## Decisions and constraints
 
-See ADR-012 and BUSINESS_RULES.md. `LocalDate` carries Gregorian components rather than a timestamp. Callers must determine the relevant local date and combine recurrence with effective version and lifecycle state. Schedules are not yet stored; no default must be invented for existing versions. SQLite is unencrypted.
+See ADR-013 and DATABASE_SCHEMA.md. Each schedule belongs to a habit version; weekdays use a validated seven-bit ISO mask, and existing versions with no row remain unconfigured. A schedule cannot be inserted/changed/deleted for a version with occurrences. The low-level store is not integrated with the habit writer or audit and is not a user-facing editing workflow. SQLite is unencrypted.
 
 ## Verification and blockers
 
-Before changes, analysis and 21 tests passed. Five targeted date/recurrence tests and a temporary `dart run` smoke script passed; the script was removed. After changes, formatting, analysis and all 26 tests passed. No Android integration test was run.
+Before changes, analysis and 26 tests passed. Targeted tests passed; a first temporary smoke command failed due to shell path escaping and passed after quoting. After changes, formatting, analysis and all 30 tests passed. Tests used isolated local databases; Android migration and integration tests were not run.
 
 ## Next bounded task
 
-Design and implement versioned persistence for daily and selected-weekday schedules with a non-destructive migration and tests. Do not infer schedules for existing versions or generate occurrences before lifecycle integration.
+Design and implement versioned lifecycle events and an applicability evaluator combining lifecycle, habit version and stored schedule, with isolated tests. Do not generate occurrences until these rules are verified.

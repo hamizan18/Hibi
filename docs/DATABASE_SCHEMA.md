@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 5 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 6 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -36,14 +36,21 @@ Schema version 5 is defined in `lib/core/database/app_database.dart` using expli
 | `habit_counter_events` | `occurrence_id` | TEXT | NOT NULL, foreign key to `habit_occurrences(id)`, ON DELETE RESTRICT |
 | `habit_counter_events` | `quantity` | INTEGER | NOT NULL, positive integer; multiple events per occurrence |
 | `habit_counter_events` | `occurred_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
+| `habit_schedules` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_versions(id)`, ON DELETE RESTRICT |
+| `habit_schedules` | `recurrence` | TEXT | NOT NULL, `daily` or `weekdays` |
+| `habit_schedules` | `start_date` | TEXT | NOT NULL, valid ISO date; inclusive anchor |
+| `habit_schedules` | `end_exclusive` | TEXT | NULL or valid ISO date strictly after start |
+| `habit_schedules` | `weekday_mask` | INTEGER | NULL for daily; integer 1–127 for weekdays |
 
-The settings and identity primary keys and per-habit revision/occurrence uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 4 to 5 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
+The settings and identity primary keys and per-habit revision/occurrence uniqueness constraints have SQLite implicit unique indexes. `habit_versions_by_habit_start` indexes `(habit_id, effective_start)`; `habit_version_audit_by_habit_time` indexes `(habit_id, occurred_at_utc_us)`; `habit_occurrences_by_version_date` indexes `(habit_version_id, local_date)`; `habit_counter_events_by_occurrence_time` indexes `(occurrence_id, occurred_at_utc_us)`. Insert and update triggers reject overlapping half-open version intervals for the same habit. Valid dates are real `YYYY-MM-DD` dates in years 0001–9999. Foreign keys are enabled per connection. Migrations from versions 1 through 5 to 6 add missing tables transactionally without replacing existing records. Unsupported transitions fail rather than reset data. The disk database is `hibi.sqlite` in the application support directory.
 
 Counter targets are linked to a specific habit version; the row's presence identifies a counter configuration. Counts use exact positive whole units in the signed SQLite 64-bit integer range (1 to 9223372036854775807), without fractions or floating point; decimal measurements need a separate precision design. `CounterTarget` additionally trims whitespace and rejects blank units. Existing versions without target rows remain explicitly unconfigured: migration never guesses a type, target or unit.
 
 Occurrence insertion requires a matching habit, applicable version interval, and matching counter target snapshot. Triggers reject occurrence interpretation changes, target changes/deletion when occurrences reference the version, and version changes that would invalidate an existing occurrence or change its name. A version end may still change when all referenced occurrences remain in range. These restrictions do not implement a correction workflow or permanent privacy deletion; those workflows require an explicit future design and migration.
 
-The schema has no status, persisted schedule, lifecycle or occurrence generator: a missing row or missing event must not be interpreted as a failure or success. A separate pure daily/weekday recurrence evaluator exists but is not connected to persistence. Event insertion alone is not an audited user-facing logging workflow. Direct SQL can bypass application-level auditing; the schema does not validate recurrence, pause periods, time-zone context for event input, or the aggregate sum. There is no correction preview, audit access control, derived-data recalculation or UI. Counter snapshots, events and audit contain personal data in unencrypted local storage; privacy access and deletion are not implemented. No production records are seeded.
+`habit_schedules` stores one typed recurrence per habit version. In `weekday_mask`, bit 0 is Monday and bit 6 is Sunday; at least one weekday must be selected. The recurrence anchor may precede the version's effective interval; consumers must combine both intervals. Existing versions without a schedule remain unconfigured and migration does not guess defaults. Triggers reject inserting, changing or deleting a schedule if its version has occurrences; these triggers do not constitute a correction/audit workflow and future privacy deletion needs an explicit design.
+
+The schema has no status, lifecycle or occurrence generator: a missing row or missing event must not be interpreted as a failure or success. `HabitScheduleStore` provides low-level insert/read only and is not an authorized user-facing edit or audit workflow. Schedules are not integrated with the existing version writer, occurrence generation, or UI. Direct SQL can bypass application-level auditing; the schema does not validate recurrence against occurrence dates, pause periods, time-zone context for event input, or aggregate progress. Counter snapshots, events and audit contain personal data in unencrypted local storage; privacy access and deletion are not implemented. No production records are seeded.
 
 ## Planned logical domains (not implemented schema)
 

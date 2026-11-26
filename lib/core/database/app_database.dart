@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -41,17 +41,19 @@ class AppDatabase extends GeneratedDatabase {
       await _createCounterTargetSchema();
       await _createHabitAuditSchema();
       await _createOccurrenceSchema();
+      await _createScheduleSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 4 || to != 5) {
+      if (from < 1 || from > 5 || to != 6) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
         if (from == 1) await _createHabitSchema();
         if (from <= 2) await _createCounterTargetSchema();
         if (from <= 3) await _createHabitAuditSchema();
-        await _createOccurrenceSchema();
+        if (from <= 4) await _createOccurrenceSchema();
+        await _createScheduleSchema();
       });
     },
     beforeOpen: (details) async {
@@ -228,6 +230,67 @@ class AppDatabase extends GeneratedDatabase {
     await customStatement('''
       CREATE INDEX habit_counter_events_by_occurrence_time
       ON habit_counter_events (occurrence_id, occurred_at_utc_us)
+    ''');
+  }
+
+  Future<void> _createScheduleSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_schedules (
+        habit_version_id TEXT NOT NULL PRIMARY KEY
+          REFERENCES habit_versions(id) ON DELETE RESTRICT,
+        recurrence TEXT NOT NULL CHECK (recurrence IN ('daily', 'weekdays')),
+        start_date TEXT NOT NULL CHECK (
+          start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(start_date, 1, 4) >= '0001'
+          AND date(start_date, '+0 days') IS start_date
+        ),
+        end_exclusive TEXT CHECK (
+          end_exclusive IS NULL OR (
+            end_exclusive GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+            AND substr(end_exclusive, 1, 4) >= '0001'
+            AND date(end_exclusive, '+0 days') IS end_exclusive
+            AND end_exclusive > start_date
+          )
+        ),
+        weekday_mask INTEGER,
+        CHECK (
+          (recurrence = 'daily' AND weekday_mask IS NULL)
+          OR (recurrence = 'weekdays' AND typeof(weekday_mask) = 'integer'
+              AND weekday_mask BETWEEN 1 AND 127)
+        )
+      )
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_schedules_protect_insert
+      BEFORE INSERT ON habit_schedules
+      WHEN EXISTS (
+        SELECT 1 FROM habit_occurrences WHERE habit_version_id = NEW.habit_version_id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'schedule correction workflow required');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_schedules_protect_update
+      BEFORE UPDATE ON habit_schedules
+      WHEN EXISTS (
+        SELECT 1 FROM habit_occurrences
+        WHERE habit_version_id = OLD.habit_version_id
+           OR habit_version_id = NEW.habit_version_id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'schedule correction workflow required');
+      END
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_schedules_protect_delete
+      BEFORE DELETE ON habit_schedules
+      WHEN EXISTS (
+        SELECT 1 FROM habit_occurrences WHERE habit_version_id = OLD.habit_version_id
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'schedule correction workflow required');
+      END
     ''');
   }
 

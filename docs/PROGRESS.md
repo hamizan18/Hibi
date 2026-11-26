@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; a pure daily/weekday recurrence evaluator exists alongside internal counter data infrastructure, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; daily/weekday recurrence and low-level versioned schedule persistence exist, but habit tracking is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 5, including settings, habit identity, versioned counter targets, audit, counter occurrences and events; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 6, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences and events; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -100,10 +100,19 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and all 26 tests passed.
 - Tests exercise anchor/end boundaries, selected weekdays, leap years, year changes, invalid dates and inputs, and immutable weekday selection. Schedules are not persisted or connected to occurrence generation, versions, lifecycle or UI. Android integration tests were not run.
 
+### Milestone 1: versioned schedule persistence
+
+- At session start `git status --short --branch` showed a clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 26 tests.
+- Added schema version 6 and `HabitScheduleStore` for daily and selected-weekday schedules per habit version. Existing versions retain no schedule unless explicitly configured; SQLite rejects invalid dates/masks and protects versions with occurrences from direct schedule insertion, update or deletion.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits\data\habit_schedule_store.dart test && flutter.bat test test\habit_schedule_store_test.dart test\database_test.dart test\habit_schema_test.dart test\counter_target_test.dart test\counter_habit_writer_test.dart test\occurrence_schema_test.dart"`: 22 tests passed.
+- Temporary smoke test: `cmd.exe /c flutter.bat test test\_schedule_persistence_smoke_test.dart` failed because the shell consumed the path separator; `cmd.exe /c "flutter.bat test test\_schedule_persistence_smoke_test.dart"` passed one test. The temporary test was removed.
+- `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting completed, analysis passed and all 30 tests passed.
+- Migration and storage tests used isolated local databases; Android migration and integration tests were not run. The store is not integrated with the habit writer, lifecycle, occurrence generation, audit or UI.
+
 ## Limitations
 
-Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Only pure daily/weekday recurrence evaluation exists; schedule persistence, lifecycle, occurrence generation, status and audited logging are not implemented. Missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion and require an explicit future migration for those workflows. Raw SQL bypasses application-level audit. No release signing or final application ID has been configured.
+Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Only daily/weekday schedule evaluation and low-level persistence exist; lifecycle, recurrence-aware occurrence generation, status and audited logging are not implemented. Missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion. Raw SQL and low-level stores bypass application-level audit. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design and implement versioned persistence for daily and selected-weekday schedules with a non-destructive migration and tests; do not infer schedules for existing versions or generate occurrences before lifecycle integration.
+Design and implement versioned lifecycle events and an applicability evaluator that combines lifecycle, habit version and stored schedule, with isolated tests; do not generate occurrences until the combined rules are verified.

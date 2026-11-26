@@ -253,6 +253,7 @@ void main() {
       );
       await db.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_schedules');
       legacy.execute('DROP TABLE habit_counter_events');
       legacy.execute('DROP TRIGGER habit_versions_protect_occurrences');
       legacy.execute('DROP TRIGGER habit_counter_targets_protect_update');
@@ -276,7 +277,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        5,
+        6,
       );
       expect(
         (await migrated
