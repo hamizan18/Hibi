@@ -2,11 +2,11 @@
 
 ## Current state
 
-Milestone 0 is in progress; do not begin the habit engine. Existing Flutter template was adapted without initializing Git or creating production records. Read AGENTS.md and the documents it lists before continuing.
+Milestone 0 is in progress; do not begin the habit engine. A Git repository now exists and had a clean working tree at the start of this continuation session. Read AGENTS.md and the documents it lists before continuing.
 
 ## Latest work
 
-Added the foundation: `lib/app/app.dart`, `lib/app/theme/hibi_theme.dart`, `lib/core/services/app_clock.dart`, `lib/core/database/app_database.dart`, app entry point, dependencies in `pubspec.yaml` and lockfile, Android display label, `test/foundation_test.dart`, `test/database_test.dart`, and permanent documentation. Removed obsolete Flutter counter test. Five destinations are navigation placeholders, not implemented product features. The app initializes its local database before showing the router and reports initialization errors.
+The latest session verified the existing foundation without changing application code. Updated AGENTS.md, PROJECT_SPEC.md, PROGRESS.md and this handoff to reflect the Git repository and Android device results. See PROGRESS.md for commands and prior implementation details.
 
 ## Decisions and constraints
 
@@ -14,8 +14,8 @@ See DECISIONS.md and DATABASE_SCHEMA.md. The database uses explicit SQL via Drif
 
 ## Verification and blockers
 
-See PROGRESS.md for exact commands. Dependency resolution, format, static analysis after fixing one unused import, database and widget tests, and Android debug APK build passed. The build emitted Java native-access and Android SDK XML version warnings. No connected Android device or emulator or AVD image was found, so launch, visual review and persistence across Android restart remain unverified. Visual Studio is absent but is not required for the Android target.
+`flutter analyze` and all 6 existing tests passed. On Android 16 device 2510DRA23E, `flutter run` built the APK but failed to install due to device verification and user restriction. A separate overlapping `adb install` succeeded; launching the installed debug app displayed Today, the Japanese date and all five destinations correctly. The database file was created and remained after force-stop and relaunch; a written value was not tested across process restart. No integration test was run. See PROGRESS.md for exact results and do not bypass device security. The SQLite database is not encrypted.
 
 ## Next bounded task
 
-Connect an Android device or install/start an Android emulator. Run the debug app, inspect all destinations and Japanese glyphs, and verify database initialization and persistence across restart. Fix Android-specific issues and repeat relevant checks before declaring Milestone 0 complete.
+Verify a written value survives an Android process restart with an isolated test database and cleanup, without touching existing user data. Record the outcome and assess Milestone 0 acceptance before starting the habit engine.

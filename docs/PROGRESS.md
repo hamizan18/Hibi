@@ -2,7 +2,7 @@
 
 ## Active milestone
 
-Milestone 0 — Project Foundation: in progress, not accepted. Android device/emulator launch and on-device persistence are not verified. Do not start Milestone 1 before all foundation acceptance criteria pass.
+Milestone 0 — Project Foundation: in progress, not accepted. Android launch and navigation were verified, but persistence of an actual written value across an Android process restart remains unverified. Do not start Milestone 1 before all foundation acceptance criteria pass.
 
 ## Implemented
 
@@ -25,10 +25,20 @@ Milestone 0 — Project Foundation: in progress, not accepted. Android device/em
 - `cmd.exe /c "dart.bat format test\foundation_test.dart && flutter.bat analyze"`: formatting unchanged; analysis passed after the added test.
 - `cmd.exe /c flutter.bat build apk --debug`: succeeded, `build/app/outputs/flutter-apk/app-debug.apk`. Gradle emitted Java native-access and Android SDK XML version warnings.
 
+### Continuation session
+
+- `git status --short --branch`: clean working tree on `main...origin/main` before changes; Git now exists, contrary to the earlier record.
+- `cmd.exe /c "flutter.bat devices & flutter.bat emulators"`: Android 16 device `2510DRA23E` detected; no emulator sources.
+- `cmd.exe /c "flutter.bat analyze && flutter.bat test"`: analysis passed; 6 tests passed.
+- `cmd.exe /c "flutter.bat run --no-pub -d i7xsrs7hvgbqgyln"`: debug APK built, but installation failed with `INSTALL_FAILED_VERIFICATION_FAILURE`, then `INSTALL_FAILED_USER_RESTRICTED`; the app did not launch via this command. Do not bypass device security.
+- `adb -s i7xsrs7hvgbqgyln install build\app\outputs\flutter-apk\app-debug.apk`: a separate overlapping install succeeded. `adb shell am start -n com.example.hibi/.MainActivity` launched the app.
+- Visual inspection on the device confirmed the Today screen, readable Japanese date, and navigation to History, Finance, Growth, and More. The four unfinished sections were labeled unavailable.
+- `adb shell run-as com.example.hibi find . -name hibi.sqlite` found `./files/hibi.sqlite`. After `adb shell am force-stop com.example.hibi` and relaunch, the database file still existed and Today rendered. This does not verify a written value survives a process restart; host-side disk reopening is covered by `test/database_test.dart`.
+
 ## Limitations
 
-No Android device/emulator visual, launch, restart or integration test has been performed. Database is not encrypted; privacy and backup features do not exist yet. No habit, finance or other future feature is implemented. No Git repository is present. No release signing or final application ID has been configured.
+Database is not encrypted; privacy and backup features do not exist yet. No habit, finance or other future feature is implemented. No release signing or final application ID has been configured. See the latest handoff for current Android verification.
 
 ## Next bounded task
 
-Run the app on an Android device or emulator, verify all five destinations, Japanese date rendering, database startup and persistence across restart; resolve any Android-specific failures before considering Milestone 0 accepted.
+Verify a written value survives an Android process restart using an isolated test database and cleanup; do not modify or delete existing user data. Then assess all Milestone 0 acceptance criteria before starting Milestone 1.
