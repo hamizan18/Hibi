@@ -2,7 +2,7 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal audited counter versions and counter occurrence/event schema exist, but the habit engine is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; a pure daily/weekday recurrence evaluator exists alongside internal counter data infrastructure, but habit tracking is not operational.
 
 ## Implemented
 
@@ -92,10 +92,18 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and all 21 tests passed.
 - No production data was inserted. Schema tests used isolated local databases; Android migration and integration tests were not run. No schedule engine, occurrence generator, status engine, audited event logging or UI exists.
 
+### Milestone 1: date-only recurrence evaluation
+
+- At session start `git status --short --branch` showed clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 21 tests.
+- Added `lib/features/habits/domain/habit_schedule.dart`: validated Gregorian `LocalDate` and pure daily/selected-ISO-weekday applicability with inclusive start and optional exclusive end. The evaluator does not use a clock, database or time-zone conversion and does not check versions or lifecycle.
+- `cmd.exe /c "dart.bat format lib\features\habits\domain\habit_schedule.dart test\habit_schedule_test.dart && flutter.bat test test\habit_schedule_test.dart && dart.bat run tool\schedule_smoke.dart"`: 5 targeted tests passed and temporary smoke script printed `schedule smoke: passed`; the script was removed.
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and all 26 tests passed.
+- Tests exercise anchor/end boundaries, selected weekdays, leap years, year changes, invalid dates and inputs, and immutable weekday selection. Schedules are not persisted or connected to occurrence generation, versions, lifecycle or UI. Android integration tests were not run.
+
 ## Limitations
 
-Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Scheduling, occurrence generation, status and audited logging are not implemented: missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion and require an explicit future migration for those workflows. Raw SQL bypasses application-level audit. No release signing or final application ID has been configured.
+Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Only pure daily/weekday recurrence evaluation exists; schedule persistence, lifecycle, occurrence generation, status and audited logging are not implemented. Missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion and require an explicit future migration for those workflows. Raw SQL bypasses application-level audit. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Implement and test a pure, clock-independent schedule applicability engine for anchored daily and selected-weekday schedules; do not generate occurrences or expose UI until lifecycle and version applicability are integrated.
+Design and implement versioned persistence for daily and selected-weekday schedules with a non-destructive migration and tests; do not infer schedules for existing versions or generate occurrences before lifecycle integration.

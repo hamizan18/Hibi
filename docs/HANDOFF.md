@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: internal audited counter versions and counter occurrence/event schema exist, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal counter data infrastructure and pure daily/weekday recurrence evaluation exist, but habit tracking is not operational.
 
 ## Latest work
 
-Added schema version 5 for counter occurrences and progress events, validation and history-protection triggers, and `test/occurrence_schema_test.dart`. Updated old migration fixtures and documentation. No occurrence generation, status, event logging API, UI or production records were added.
+Added `lib/features/habits/domain/habit_schedule.dart` and `test/habit_schedule_test.dart`. The pure evaluator supports anchored daily and selected-weekday recurrence with optional exclusive end and validated calendar dates. No database, occurrence generation or UI was changed. Updated BUSINESS_RULES.md, DECISIONS.md, PROJECT_SPEC.md, ROADMAP.md, DATABASE_SCHEMA.md, PROGRESS.md and this handoff.
 
 ## Decisions and constraints
 
-See ADR-011 and DATABASE_SCHEMA.md. Each occurrence references the matching applicable habit version and snapshots its counter target; one occurrence per habit/local date and multiple positive integer events are supported. Triggers guard historical interpretation, but do not enforce schedules, pauses, audit, privacy deletion or correction. Missing data is not success or failure. SQLite is unencrypted.
+See ADR-012 and BUSINESS_RULES.md. `LocalDate` carries Gregorian components rather than a timestamp. Callers must determine the relevant local date and combine recurrence with effective version and lifecycle state. Schedules are not yet stored; no default must be invented for existing versions. SQLite is unencrypted.
 
 ## Verification and blockers
 
-Before changes, analysis and all 18 tests passed. After changes, `dart format .`, `flutter analyze` and all 21 tests passed. Isolated tests cover migrations, rollback, version applicability, snapshot consistency and multiple events. No Android migration or integration tests were run this session.
+Before changes, analysis and 21 tests passed. Five targeted date/recurrence tests and a temporary `dart run` smoke script passed; the script was removed. After changes, formatting, analysis and all 26 tests passed. No Android integration test was run.
 
 ## Next bounded task
 
-Implement and test a pure, clock-independent schedule applicability engine for anchored daily and selected-weekday schedules. Do not generate occurrences or expose UI until lifecycle and version applicability are integrated.
+Design and implement versioned persistence for daily and selected-weekday schedules with a non-destructive migration and tests. Do not infer schedules for existing versions or generate occurrences before lifecycle integration.
