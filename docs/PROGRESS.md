@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal same-day counter resolution supports explicit failed/excused states, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal counter workflows support versioned schedules, optional editable counter starter templates, detailed lifecycle/applicability inspection, transactional same-day progress and explicit failed/excused resolution actions, bounded prior-date recovery, effective day-status interpretation, read-only multi-habit day rosters, date-range history and recoverable-deficit queries, and Riverpod dependency providers, but habit tracking UI and historical correction are not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 9, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences/events, explicit resolutions and lifecycle history; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 10, including settings, habit identity, versioned counter targets and schedules, optional editable counter starter templates, audit, counter occurrences/events, explicit resolutions, immutable counter recoveries, transactional current-day counter action service, effective day-status interpretation, read-only multi-habit day rosters, date-range history and recoverable-deficit queries, detailed lifecycle/applicability readers and Riverpod service providers; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -177,10 +177,71 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - After adding a failed-v8-migration rollback test, `cmd.exe /c "dart.bat format test\counter_resolution_test.dart && flutter.bat analyze && flutter.bat test test\counter_resolution_test.dart"` passed analysis and all 6 targeted tests. Tests use isolated databases and cover both resolution states, duplicates, completed and unknown data, event rejection, rollback, migration preservation and reopen.
 - Android migration and integration tests were not run. No UI, historical correction, recovery or production data was added.
 
+### Milestone 1: counter-day effective-status interpretation
+
+- At session start `git status --short` was clean on `0a0c79e`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 72 existing tests.
+- Added pure `interpretCounterDay`, `CounterDayEffectiveStatus`, `CounterDayEvaluation` in `lib/features/habits/domain/counter_day_status.dart` and `CounterDayReader.evaluate` in `lib/features/habits/data/counter_day_reader.dart`. An applicable date without an occurrence evaluates to `pending` only when the applicable version has a configured `CounterTarget` (preserving `hasOccurrence == false` without writing rows) and otherwise `unknown`. Contradictory historical records (such as occurrences on `notApplicable`/`unknown` dates or resolution snapshots mismatched by raw-SQL events) evaluate to `conflict` while keeping all underlying records accessible.
+- `cmd.exe /c "dart.bat format lib\features\habits\domain\counter_day_status.dart lib\features\habits\data\counter_day_reader.dart test\counter_day_status_test.dart && flutter.bat analyze && flutter.bat test test\counter_day_status_test.dart test\counter_day_reader_test.dart"`: formatting and analysis passed; all 8 targeted tests passed.
+- Isolated databases were used. Android and integration tests were not run. No schema migration, UI or production data was added.
+
+### Milestone 1: bounded counter recovery calculation
+
+- Added pure `CounterRecovery` and `CounterRecoveryStatus` (`unrecovered`, `partiallyRecovered`, `recovered`) in `lib/features/habits/domain/counter_recovery.dart`, validating explicitly `failed` incomplete progress and positive whole-number recovery quantities bounded by the initial deficit (`target - recordedTotal`). Original same-day progress is preserved separately from recovered totals.
+- `cmd.exe /c "dart.bat format lib\features\habits\domain\counter_recovery.dart test\counter_recovery_test.dart && flutter.bat test test\counter_recovery_test.dart"`: formatting completed and all 5 targeted tests passed, covering unrecovered, partial, multi-step full recovery, zero-progress recovery, rejected unresolved/excused/completed states, non-positive or over-deficit quantities and signed 64-bit boundary limits.
+- Pure domain tests only; no database schema change, UI or production data was added.
+
+### Milestone 1: audited counter recovery persistence
+
+- Added schema version 10 (`habit_counter_recoveries` with index and immutable update/delete triggers) in `lib/core/database/app_database.dart`, plus `CounterRecoveryRecord`, `CounterRecoveryReader` and `CounterRecoveryWriter` in `lib/features/habits/data/counter_recovery_store.dart`. Updated prior migration fixtures to drop `habit_counter_recoveries` and expect version 10.
+- `CounterRecoveryWriter` records positive current-day recovery entries only for prior-date applicable occurrences explicitly resolved as `failed` while the habit is currently `active`, rejecting quantities above the remaining deficit and leaving original same-day events and today's occurrence untouched.
+- Isolated database tests in `test/counter_recovery_store_test.dart` cover partial and multi-step full recovery snapshots, immutability triggers, rejection of same-day/future/unresolved/excused/paused/over-deficit writes, transaction rollback on insert failure, version-9 migration preservation/reopen and failed-v9-migration rollback.
+
+### Milestone 1: counter-day recovery status integration
+
+- Updated `CounterDay` and `CounterDayReader` in `lib/features/habits/data/counter_day_reader.dart` to load ordered `CounterRecoveryRecord` entries in the same read transaction, and extended `interpretCounterDay` in `lib/features/habits/domain/counter_day_status.dart` with `CounterDayEffectiveStatus.recovered` and `CounterDayEvaluation.recovery`.
+- An explicitly `failed` occurrence remains `failed` when unrecovered or partially recovered (exposing `CounterRecovery` details) and becomes `recovered` only when remaining deficit reaches zero, while keeping same-day `recorded.progress.total` and today's target separate. Contradictory raw-SQL recovery records (on excused/unresolved occurrences or on/before the occurrence date) report `conflict` without hiding underlying entries.
+- Tested in `test/counter_day_recovery_status_test.dart` (2 targeted tests).
+
+### Milestone 1: read-only multi-habit counter day roster
+
+- Added `CounterDayRosterItem` and `CounterDayRosterReader` in `lib/features/habits/data/counter_day_roster_reader.dart`, evaluating all stored habits on a requested `LocalDate` in deterministic `(created_at_utc_us, id)` order within one read transaction and pairing applicable version metadata (`versionId`, `name`, `revision`) with `CounterDayReader.evaluate` without creating occurrences.
+- Initial combined verification `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test test\counter_recovery_store_test.dart test\counter_day_recovery_status_test.dart test\counter_day_roster_reader_test.dart"` passed formatting and analysis, with 8 of 9 tests passing and 1 test failing in `test/counter_recovery_store_test.dart` because `LocalDate` implements `compareTo` rather than `==`. Updated the assertion to `compareTo(...) == 0`.
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting unchanged (42 files), analysis passed and all 90 tests passed.
+- Isolated databases were used across all tests; Android migration and integration tests were not run. No UI, historical correction or production data was added.
+
+### Milestone 1: counter date-range history and recoverable-deficit reader
+
+- Before changes, `git status --short` showed the uncommitted Milestone 1 counter recovery/roster files from the prior session; those changes were preserved.
+- Added `CounterDateHistoryItem`, `CounterRecoverableDeficit` and `CounterHistoryReader` in `lib/features/habits/data/counter_history_reader.dart`. `readRange` evaluates an inclusive `[startInclusive, endInclusive]` local calendar interval in one read transaction without creating occurrences; `findRecoverableDeficits` returns prior-date explicitly `failed` occurrences with positive remaining deficits only when the habit is `active` on `asOfDate`.
+- Added 3 isolated database tests in `test/counter_history_reader_test.dart` covering inverted ranges, nonexistent habits, multi-day range evaluation across pre-start, version changes, month end and pause, and recoverable-deficit filtering.
+
+### Milestone 1: transactional current-day counter action service
+
+- Added `CounterTodayActionService` in `lib/features/habits/data/counter_today_action_service.dart`, coordinating on-demand current-day occurrence retrieval/creation with same-day progress (`recordTodayProgress`) or explicit failed/excused resolution (`resolveToday`) in a single database transaction using one captured clock instant, plus `recoverPriorDeficit`. Any progress or resolution failure rolls back a newly created occurrence row.
+- Added 2 isolated database tests in `test/counter_today_action_service_test.dart` covering on-demand creation, occurrence reuse, atomic rollback of newly created occurrences on invalid progress or injected resolution failure, zero-progress resolution and multi-step prior-deficit recovery.
+
+### Milestone 1: detailed lifecycle history and applicability reasons
+
+- Extended `lib/features/habits/data/habit_lifecycle.dart` with `HabitLifecycleEvent`, `HabitLifecycleReader` (`findEffectiveOn`, `readHistory`), `HabitApplicabilityReason` and `HabitApplicabilityReader.describe`, distinguishing `applicable`, `beforeStart`, `scheduled`, `paused`, `archived`, `deleted`, `unscheduled`, `missingVersions`, `missingLifecycle`, `missingActiveVersion` and `missingSchedule` while keeping `evaluate` backward-compatible.
+- Added 2 isolated database tests in `test/habit_lifecycle_detail_test.dart` covering effective-date lookup, full transition history and all 11 applicability reasons.
+
+### Milestone 1: optional editable counter starter templates
+
+- Added `CounterStarterTemplateId` and `CounterStarterTemplate` (`Quran Reading` / `N` / 5 pages daily and `Push Up` / `P` / 10 repetitions daily) in `lib/features/habits/domain/counter_starter_template.dart`, and `CounterHabitWriter.createFromStarterTemplate` in `lib/features/habits/data/counter_habit_writer.dart`. Templates are never auto-populated; explicit instantiation validates edits and writes no historical occurrences.
+- Added 2 tests in `test/counter_starter_template_test.dart` covering default values, validation of edited fields, empty database when skipped, custom weekday schedule instantiation and rejection of backdated creation.
+
+### Milestone 1: Riverpod providers for counter habit services
+
+- Added `lib/features/habits/application/counter_habit_providers.dart`, wiring lifecycle, applicability, writer, occurrence, progress, resolution, recovery, day/roster/history readers, `CounterTodayActionService`, and read-only `counterDayRosterProvider` / `counterTodayRosterProvider` to `databaseProvider` and `appClockProvider`.
+- Added `test/counter_habit_providers_test.dart` verifying end-to-end provider overrides with an isolated in-memory database and mutable fake clock across template creation, progress, failure resolution, next-day deficit lookup, recovery and roster queries.
+- Initial `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"` formatted 51 files, passed analysis, and passed 99 of 100 tests; `test/counter_starter_template_test.dart` failed 1 assertion because `h_pushup` and `h_quran` shared the same `FixedClock` timestamp and sorted alphabetically by ID (`h_pushup` before `h_quran`). Updated the expected roster index order in `test/counter_starter_template_test.dart`.
+- Reran `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && git status --short"`: formatting unchanged (51 files), analysis passed and all 100 tests passed.
+- Isolated databases were used across all tests; Android migration and integration tests were not run. No UI, historical correction or production data was added.
+
 ## Limitations
 
-Database, occurrence data, lifecycle reasons and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Counter logging and explicit resolution are internal and restricted to the current local date; changing a resolution or recording further progress requires a future correction workflow. Recovery, notifications and UI are not implemented. Raw SQL can bypass writer checks and modify event records. Immutable resolution triggers require an explicit future privacy-deletion/correction design. No release signing or final application ID has been configured.
+Database, occurrence data, lifecycle reasons, resolution reasons, recovery notes and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Counter logging, explicit resolution and bounded recovery are internal and restricted to the current local date (recovering prior failed dates); changing a resolution, recovery or historical event requires a future correction workflow. Non-counter tracking types (boolean, duration, checklist, avoidance, measurement, time/range), notifications and user-facing habit UI are not implemented. Raw SQL can bypass writer checks and modify event records or insert contradictory recovery rows (which `CounterDayReader.evaluate` surfaces as `conflict`). Immutable lifecycle, resolution and recovery triggers require an explicit future privacy-deletion/correction design. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Implement a read-only counter-day effective-status interpretation that combines applicability, missing occurrence, recorded progress and explicit resolution without hiding contradictory historical data; test unknown/not-applicable and no-record cases. Do not add UI or infer failure.
+Implement a read-only counter habit configuration and version-timeline reader that returns a habit's current/effective version, counter target, schedule, lifecycle state/history and scheduled future versions in one transaction without mutating data or inferring defaults. Do not add UI.

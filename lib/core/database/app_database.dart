@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -45,10 +45,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createLifecycleSchema();
       await _createCounterEventAuditSchema();
       await _createCounterResolutionSchema();
+      await _createCounterRecoverySchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 8 || to != 9) {
+      if (from < 1 || from > 9 || to != 10) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -59,7 +60,8 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 5) await _createScheduleSchema();
         if (from <= 6) await _createLifecycleSchema();
         if (from <= 7) await _createCounterEventAuditSchema();
-        await _createCounterResolutionSchema();
+        if (from <= 8) await _createCounterResolutionSchema();
+        await _createCounterRecoverySchema();
       });
     },
     beforeOpen: (details) async {
@@ -368,6 +370,47 @@ class AppDatabase extends GeneratedDatabase {
         BEFORE $operation ON habit_counter_resolutions
         BEGIN
           SELECT RAISE(ABORT, 'resolution correction workflow required');
+        END
+      ''');
+    }
+  }
+
+  Future<void> _createCounterRecoverySchema() async {
+    await customStatement('''
+      CREATE TABLE habit_counter_recoveries (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        occurrence_id TEXT NOT NULL REFERENCES habit_occurrences(id) ON DELETE RESTRICT,
+        recovery_local_date TEXT NOT NULL CHECK (
+          recovery_local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(recovery_local_date, 1, 4) >= '0001'
+          AND date(recovery_local_date, '+0 days') IS recovery_local_date
+        ),
+        quantity INTEGER NOT NULL CHECK (typeof(quantity) = 'integer' AND quantity > 0),
+        original_target_count INTEGER NOT NULL CHECK (typeof(original_target_count) = 'integer' AND original_target_count > 0),
+        original_progress_total INTEGER NOT NULL CHECK (
+          typeof(original_progress_total) = 'integer'
+          AND original_progress_total >= 0
+          AND original_progress_total < original_target_count
+        ),
+        remaining_deficit INTEGER NOT NULL CHECK (
+          typeof(remaining_deficit) = 'integer'
+          AND remaining_deficit >= 0
+          AND remaining_deficit < original_target_count - original_progress_total
+        ),
+        note TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_counter_recoveries_by_occurrence_time
+      ON habit_counter_recoveries (occurrence_id, occurred_at_utc_us)
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_counter_recoveries_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_counter_recoveries
+        BEGIN
+          SELECT RAISE(ABORT, 'recovery correction workflow required');
         END
       ''');
     }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../domain/counter_starter_template.dart';
 import '../domain/counter_target.dart';
 import '../domain/habit_schedule.dart';
 import 'habit_lifecycle.dart';
@@ -16,6 +17,34 @@ class CounterHabitWriter {
 
   final AppDatabase _database;
   final AppClock _clock;
+
+  /// Explicitly instantiates a counter habit from an optional default or
+  /// user-edited starter template without seeding historical occurrences.
+  Future<void> createFromStarterTemplate({
+    required CounterStarterTemplate template,
+    required String habitId,
+    required String versionId,
+    required String auditId,
+    required String lifecycleEventId,
+    required DateTime effectiveDate,
+    HabitSchedule? schedule,
+  }) {
+    final startDate = LocalDate(
+      effectiveDate.year,
+      effectiveDate.month,
+      effectiveDate.day,
+    );
+    return create(
+      habitId: habitId,
+      versionId: versionId,
+      auditId: auditId,
+      lifecycleEventId: lifecycleEventId,
+      name: template.name,
+      effectiveDate: effectiveDate,
+      target: template.target,
+      schedule: schedule ?? template.defaultSchedule(startDate: startDate),
+    );
+  }
 
   Future<void> create({
     required String habitId,

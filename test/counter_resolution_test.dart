@@ -215,6 +215,7 @@ void main() {
       ).append(eventId: 'e', occurrenceId: 'o', quantity: 2);
       await original.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute('PRAGMA user_version = 8');
       legacy.close();
@@ -266,6 +267,7 @@ void main() {
       ).append(eventId: 'e', occurrenceId: 'o', quantity: 2);
       await original.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_counter_recoveries');
       legacy.execute('DROP TABLE habit_counter_resolutions');
       legacy.execute(
         "CREATE TRIGGER habit_counter_resolutions_no_update BEFORE UPDATE ON habit_counter_events BEGIN SELECT RAISE(ABORT, 'collision'); END",

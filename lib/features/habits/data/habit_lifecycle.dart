@@ -9,6 +9,93 @@ enum HabitLifecycleState { scheduled, active, paused, archived, deleted }
 
 enum HabitApplicability { applicable, notApplicable, unknown }
 
+/// Specific reason explaining why a habit is applicable, notApplicable or unknown.
+enum HabitApplicabilityReason {
+  applicable,
+  beforeStart,
+  scheduled,
+  paused,
+  archived,
+  deleted,
+  unscheduled,
+  missingVersions,
+  missingLifecycle,
+  missingActiveVersion,
+  missingSchedule,
+}
+
+typedef HabitApplicabilityDetail = ({
+  HabitApplicability applicability,
+  HabitApplicabilityReason reason,
+  HabitLifecycleState? lifecycleState,
+  String? versionId,
+});
+
+/// Immutable dated lifecycle transition record.
+class HabitLifecycleEvent {
+  const HabitLifecycleEvent({
+    required this.id,
+    required this.habitId,
+    required this.effectiveDate,
+    required this.previousState,
+    required this.state,
+    required this.reason,
+    required this.createdAtUtc,
+  });
+
+  final String id;
+  final String habitId;
+  final LocalDate effectiveDate;
+  final HabitLifecycleState? previousState;
+  final HabitLifecycleState state;
+  final String? reason;
+  final DateTime createdAtUtc;
+}
+
+/// Read-only inspection of effective-dated lifecycle transitions.
+class HabitLifecycleReader {
+  const HabitLifecycleReader(this._db);
+
+  final AppDatabase _db;
+
+  Future<HabitLifecycleEvent?> findEffectiveOn(
+    String habitId,
+    LocalDate date,
+  ) => _db.transaction(() async {
+    await _requireHabit(_db, habitId);
+    final key = _key(date);
+    final row = await _db
+        .customSelect(
+          '''
+      SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us
+      FROM habit_lifecycle_events
+      WHERE habit_id = ? AND effective_date <= ?
+      ORDER BY effective_date DESC LIMIT 1
+    ''',
+          variables: [Variable<String>(habitId), Variable<String>(key)],
+        )
+        .getSingleOrNull();
+    return row == null ? null : _mapEvent(row);
+  });
+
+  Future<List<HabitLifecycleEvent>> readHistory(String habitId) =>
+      _db.transaction(() async {
+        await _requireHabit(_db, habitId);
+        final rows = await _db
+            .customSelect(
+              '''
+          SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us
+          FROM habit_lifecycle_events
+          WHERE habit_id = ?
+          ORDER BY effective_date ASC, created_at_utc_us ASC, id ASC
+        ''',
+              variables: [Variable<String>(habitId)],
+            )
+            .get();
+        return List.unmodifiable([for (final row in rows) _mapEvent(row)]);
+      });
+}
+
 /// Internal append-only lifecycle history. Not a user-facing correction API.
 class HabitLifecycleStore {
   const HabitLifecycleStore(this._db, this._clock);
@@ -104,15 +191,12 @@ class HabitApplicabilityReader {
 
   final AppDatabase _db;
 
-  Future<HabitApplicability> evaluate(String habitId, LocalDate date) =>
+  Future<HabitApplicability> evaluate(String habitId, LocalDate date) async =>
+      (await describe(habitId, date)).applicability;
+
+  Future<HabitApplicabilityDetail> describe(String habitId, LocalDate date) =>
       _db.transaction(() async {
-        final habit = await _db
-            .customSelect(
-              'SELECT id FROM habits WHERE id = ?',
-              variables: [Variable<String>(habitId)],
-            )
-            .getSingleOrNull();
-        if (habit == null) throw StateError('Habit does not exist');
+        await _requireHabit(_db, habitId);
         final key = _key(date);
         final earliest = await _db
             .customSelect(
@@ -121,9 +205,21 @@ class HabitApplicabilityReader {
             )
             .getSingle();
         final firstDate = earliest.readNullable<String>('first_date');
-        if (firstDate == null) return HabitApplicability.unknown;
+        if (firstDate == null) {
+          return (
+            applicability: HabitApplicability.unknown,
+            reason: HabitApplicabilityReason.missingVersions,
+            lifecycleState: null,
+            versionId: null,
+          );
+        }
         if (key.compareTo(firstDate) < 0) {
-          return HabitApplicability.notApplicable;
+          return (
+            applicability: HabitApplicability.notApplicable,
+            reason: HabitApplicabilityReason.beforeStart,
+            lifecycleState: null,
+            versionId: null,
+          );
         }
         final event = await _db
             .customSelect(
@@ -134,12 +230,31 @@ class HabitApplicabilityReader {
               variables: [Variable<String>(habitId), Variable<String>(key)],
             )
             .getSingleOrNull();
-        if (event == null) return HabitApplicability.unknown;
+        if (event == null) {
+          return (
+            applicability: HabitApplicability.unknown,
+            reason: HabitApplicabilityReason.missingLifecycle,
+            lifecycleState: null,
+            versionId: null,
+          );
+        }
         final state = HabitLifecycleState.values.byName(
           event.read<String>('state'),
         );
         if (state != HabitLifecycleState.active) {
-          return HabitApplicability.notApplicable;
+          return (
+            applicability: HabitApplicability.notApplicable,
+            reason: switch (state) {
+              HabitLifecycleState.scheduled =>
+                HabitApplicabilityReason.scheduled,
+              HabitLifecycleState.paused => HabitApplicabilityReason.paused,
+              HabitLifecycleState.archived => HabitApplicabilityReason.archived,
+              HabitLifecycleState.deleted => HabitApplicabilityReason.deleted,
+              HabitLifecycleState.active => HabitApplicabilityReason.applicable,
+            },
+            lifecycleState: state,
+            versionId: null,
+          );
         }
         final version = await _db
             .customSelect(
@@ -154,15 +269,72 @@ class HabitApplicabilityReader {
               ],
             )
             .getSingleOrNull();
-        if (version == null) return HabitApplicability.unknown;
+        if (version == null) {
+          return (
+            applicability: HabitApplicability.unknown,
+            reason: HabitApplicabilityReason.missingActiveVersion,
+            lifecycleState: state,
+            versionId: null,
+          );
+        }
+        final versionId = version.read<String>('id');
         final schedule = await HabitScheduleStore(_db)
-            .findForVersion(version.read<String>('id'));
-        if (schedule == null) return HabitApplicability.unknown;
-        return schedule.appliesOn(date)
-            ? HabitApplicability.applicable
-            : HabitApplicability.notApplicable;
+            .findForVersion(versionId);
+        if (schedule == null) {
+          return (
+            applicability: HabitApplicability.unknown,
+            reason: HabitApplicabilityReason.missingSchedule,
+            lifecycleState: state,
+            versionId: versionId,
+          );
+        }
+        final applies = schedule.appliesOn(date);
+        return (
+          applicability: applies
+              ? HabitApplicability.applicable
+              : HabitApplicability.notApplicable,
+          reason: applies
+              ? HabitApplicabilityReason.applicable
+              : HabitApplicabilityReason.unscheduled,
+          lifecycleState: state,
+          versionId: versionId,
+        );
       });
+}
+
+Future<void> _requireHabit(AppDatabase db, String habitId) async {
+  final habit = await db
+      .customSelect(
+        'SELECT id FROM habits WHERE id = ?',
+        variables: [Variable<String>(habitId)],
+      )
+      .getSingleOrNull();
+  if (habit == null) throw StateError('Habit does not exist');
+}
+
+HabitLifecycleEvent _mapEvent(QueryRow row) {
+  final prev = row.readNullable<String>('previous_state');
+  return HabitLifecycleEvent(
+    id: row.read<String>('id'),
+    habitId: row.read<String>('habit_id'),
+    effectiveDate: _parseDate(row.read<String>('effective_date')),
+    previousState: prev == null
+        ? null
+        : HabitLifecycleState.values.byName(prev),
+    state: HabitLifecycleState.values.byName(row.read<String>('state')),
+    reason: row.readNullable<String>('reason'),
+    createdAtUtc: DateTime.fromMicrosecondsSinceEpoch(
+      row.read<int>('created_at_utc_us'),
+      isUtc: true,
+    ),
+  );
 }
 
 String _key(LocalDate date) =>
     '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+LocalDate _parseDate(String value) => LocalDate(
+  int.parse(value.substring(0, 4)),
+  int.parse(value.substring(5, 7)),
+  int.parse(value.substring(8, 10)),
+);

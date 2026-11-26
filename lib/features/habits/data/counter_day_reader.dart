@@ -1,10 +1,13 @@
 import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
+import '../domain/counter_day_status.dart';
 import '../domain/counter_progress.dart';
+import '../domain/counter_target.dart';
 import '../domain/habit_schedule.dart';
-import 'counter_resolution.dart';
 import 'counter_progress_reader.dart';
+import 'counter_recovery_store.dart';
+import 'counter_resolution.dart';
 import 'habit_lifecycle.dart';
 
 /// Scheduling applicability and recorded progress are independent facts.
@@ -13,6 +16,7 @@ typedef CounterDay = ({
   String? occurrenceId,
   ({CounterProgress progress, String unit})? recorded,
   CounterResolution? resolution,
+  List<CounterRecoveryRecord> recoveries,
 });
 
 /// Reads an existing day consistently without creating or changing records.
@@ -21,14 +25,26 @@ class CounterDayReader {
 
   final AppDatabase _db;
 
-  Future<CounterDay> read({
+  Future<CounterDay> read({required String habitId, required LocalDate date}) =>
+      _db.transaction(() => _readDay(habitId, date));
+
+  Future<CounterDayEvaluation> evaluate({
     required String habitId,
     required LocalDate date,
   }) => _db.transaction(() async {
+    final day = await _readDay(habitId, date);
+    final configuredTarget = await _findConfiguredTarget(habitId, date);
+    return interpretCounterDay(
+      day: day,
+      configuredTarget: configuredTarget,
+      date: date,
+    );
+  });
+
+  Future<CounterDay> _readDay(String habitId, LocalDate date) async {
     final applicability = await HabitApplicabilityReader(_db)
         .evaluate(habitId, date);
-    final key =
-        '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final key = _dateKey(date);
     final occurrence = await _db
         .customSelect(
           'SELECT id FROM habit_occurrences WHERE habit_id = ? AND local_date = ?',
@@ -42,11 +58,46 @@ class CounterDayReader {
     final resolution = id == null
         ? null
         : await CounterResolutionReader(_db).find(id);
+    final recoveries = id == null
+        ? const <CounterRecoveryRecord>[]
+        : await CounterRecoveryReader(_db).findForOccurrence(id);
     return (
       applicability: applicability,
       occurrenceId: id,
       recorded: recorded,
       resolution: resolution,
+      recoveries: recoveries,
     );
-  });
+  }
+
+  Future<CounterTarget?> _findConfiguredTarget(
+    String habitId,
+    LocalDate date,
+  ) async {
+    final key = _dateKey(date);
+    final row = await _db
+        .customSelect(
+          '''
+      SELECT t.target_count, t.unit
+      FROM habit_versions v
+      JOIN habit_counter_targets t ON t.habit_version_id = v.id
+      WHERE v.habit_id = ? AND v.effective_start <= ?
+        AND (v.effective_end IS NULL OR ? < v.effective_end)
+      ''',
+          variables: [
+            Variable<String>(habitId),
+            Variable<String>(key),
+            Variable<String>(key),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    return CounterTarget(
+      count: row.read<int>('target_count'),
+      unit: row.read<String>('unit'),
+    );
+  }
 }
+
+String _dateKey(LocalDate date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';

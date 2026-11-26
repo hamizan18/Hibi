@@ -96,6 +96,7 @@ void main() {
     );
     await original.close();
     final legacy = sqlite3.open(file.path);
+    legacy.execute('DROP TABLE habit_counter_recoveries');
     legacy.execute('DROP TABLE habit_counter_resolutions');
     legacy.execute('DROP TABLE habit_counter_event_audit');
     legacy.execute('DROP TABLE habit_lifecycle_events');
@@ -131,7 +132,7 @@ void main() {
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      9,
+      10,
     );
     await migrated.customStatement(
       "INSERT INTO habit_occurrences VALUES ('o', 'h', 'v', '2026-11-26', 5, 'pages')",

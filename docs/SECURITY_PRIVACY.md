@@ -4,7 +4,7 @@
 
 Hibi is offline and single-user; sensitive data must never be sent to external services. Device theft, unlocked-device access, backups, notification previews, exported files, logs and recent-app previews can disclose data. The foundation's SQLite database is **not encrypted at rest**. Android device protections are not a guarantee against a compromised or unlocked device. App lock, when built, is not database encryption. Do not represent planned safeguards as operational.
 
-The local `habit_version_audit` table stores habit names, target units, counts and schedule details in unencrypted snapshots; `habit_counter_event_audit` stores occurrence IDs, progress quantities and timestamps. Counter resolution records and lifecycle events may contain optional user-provided reasons. They are not tamper-proof, have no private-view access controls or privacy deletion workflow yet, and are not exposed in the UI. Those controls must be implemented before a privacy milestone can be accepted.
+The local `habit_version_audit` table stores habit names, target units, counts and schedule details in unencrypted snapshots; `habit_counter_event_audit` stores occurrence IDs, progress quantities and timestamps. Counter resolution records, counter recovery records and lifecycle events may contain optional user-provided reasons or notes and target/progress snapshots. They are not tamper-proof, have no private-view access controls or privacy deletion workflow yet, and are not exposed in the UI. Those controls must be implemented before a privacy milestone can be accepted.
 
 ## Planned privacy milestone
 
