@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: internal counter data infrastructure and daily/weekday recurrence evaluation and low-level persistence exist, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal initial and future counter-version writes require explicit schedules, but habit tracking is not operational.
 
 ## Latest work
 
-Added schema version 6, `HabitScheduleStore`, and `test/habit_schedule_store_test.dart`. Updated existing migration fixtures and schema/business/decision/status documentation. No UI, production data, occurrence generation or lifecycle behavior was added.
+Updated `lib/features/habits/data/counter_habit_writer.dart` so future versions atomically persist an explicit schedule and before/after schedule audit, and reject schedules that end on or before the version starts. Updated `test/counter_habit_writer_test.dart` callers; added `test/counter_habit_future_schedule_test.dart` for history, audit, missing legacy schedules and rollback. Updated BUSINESS_RULES, DATABASE_SCHEMA, DECISIONS, SECURITY_PRIVACY, PROJECT_SPEC, ROADMAP, PROGRESS and HANDOFF. No schema migration, UI, occurrence generation or production data was added.
 
 ## Decisions and constraints
 
-See ADR-013 and DATABASE_SCHEMA.md. Each schedule belongs to a habit version; weekdays use a validated seven-bit ISO mask, and existing versions with no row remain unconfigured. A schedule cannot be inserted/changed/deleted for a version with occurrences. The low-level store is not integrated with the habit writer or audit and is not a user-facing editing workflow. SQLite is unencrypted.
+See ADR-016 and BUSINESS_RULES.md. Previous schedules are never copied or inferred; absent legacy schedules are captured as null. Existing occurrence/version guards continue to reject reinterpretation. Database, lifecycle reasons and audit details remain unencrypted; direct SQL and low-level stores bypass application-level safeguards.
 
 ## Verification and blockers
 
-Before changes, analysis and 26 tests passed. Targeted tests passed; a first temporary smoke command failed due to shell path escaping and passed after quoting. After changes, formatting, analysis and all 30 tests passed. Tests used isolated local databases; Android migration and integration tests were not run.
+At session start existing uncommitted user changes were present and preserved. `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and 40 tests before changes. `cmd.exe /c "dart.bat format lib\features\habits\data\counter_habit_writer.dart test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart && flutter.bat test test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart"` passed 9 targeted tests. `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"` passed formatting, analysis and all 44 tests. Tests used isolated databases; no Android or integration test was run.
 
 ## Next bounded task
 
-Design and implement versioned lifecycle events and an applicability evaluator combining lifecycle, habit version and stored schedule, with isolated tests. Do not generate occurrences until these rules are verified.
+Implement an internal, transactional, idempotent counter occurrence retrieval/creation path for a requested local date, using applicability and the correct version/target snapshot; explicitly preserve unknown and not-applicable outcomes. Test repeated requests, version boundaries, pauses and existing data; do not expose UI or infer completion/failure.

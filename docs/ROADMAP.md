@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. An internal audited counter writer, counter occurrence/event schema, and daily/weekday evaluator and low-level versioned schedule storage exist; operational tracking and historical correction workflows do not. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified; Milestone 1 is in progress and incomplete. Internal initial counter creation and future-version writes commit explicit schedules and audit together; operational tracking and historical correction workflows do not yet exist. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

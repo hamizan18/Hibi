@@ -96,6 +96,7 @@ void main() {
     );
     await original.close();
     final legacy = sqlite3.open(file.path);
+    legacy.execute('DROP TABLE habit_lifecycle_events');
     legacy.execute('DROP TABLE habit_schedules');
     _removeV5Schema(legacy);
     legacy.execute('PRAGMA user_version = 4');
@@ -128,7 +129,7 @@ void main() {
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      6,
+      7,
     );
     await migrated.customStatement(
       "INSERT INTO habit_occurrences VALUES ('o', 'h', 'v', '2026-11-26', 5, 'pages')",

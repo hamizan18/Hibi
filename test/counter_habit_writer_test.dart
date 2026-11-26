@@ -7,6 +7,7 @@ import 'package:hibi/core/database/app_database.dart';
 import 'package:hibi/core/services/app_clock.dart';
 import 'package:hibi/features/habits/data/counter_habit_writer.dart';
 import 'package:hibi/features/habits/domain/counter_target.dart';
+import 'package:hibi/features/habits/domain/habit_schedule.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqlite3/sqlite3.dart';
 
@@ -24,9 +25,11 @@ void main() {
       habitId: 'h',
       versionId: 'v1',
       auditId: 'a1',
+      lifecycleEventId: 'l1',
       name: 'Read',
       effectiveDate: DateTime(2026, 11, 26),
       target: CounterTarget(count: 5, unit: 'pages'),
+      schedule: DailySchedule(start: LocalDate(2026, 11, 26)),
     );
     await writer.scheduleVersion(
       habitId: 'h',
@@ -35,6 +38,7 @@ void main() {
       name: 'Read more',
       effectiveDate: DateTime(2026, 12, 1),
       target: CounterTarget(count: 20, unit: 'pages'),
+      schedule: DailySchedule(start: LocalDate(2026, 12, 1)),
     );
     final versions = await db
         .customSelect(
@@ -78,9 +82,11 @@ void main() {
         habitId: 'h',
         versionId: 'v1',
         auditId: 'a1',
+        lifecycleEventId: 'l1',
         name: 'Read',
         effectiveDate: DateTime(2026, 11, 26),
         target: CounterTarget(count: 5, unit: 'pages'),
+        schedule: DailySchedule(start: LocalDate(2026, 11, 26)),
       );
       await writer.scheduleVersion(
         habitId: 'h',
@@ -89,6 +95,7 @@ void main() {
         name: 'Read more',
         effectiveDate: DateTime(2026, 12, 15),
         target: CounterTarget(count: 20, unit: 'pages'),
+        schedule: DailySchedule(start: LocalDate(2026, 12, 15)),
       );
       await expectLater(
         writer.scheduleVersion(
@@ -98,6 +105,7 @@ void main() {
           name: 'Earlier change',
           effectiveDate: DateTime(2026, 12, 1),
           target: CounterTarget(count: 10, unit: 'pages'),
+          schedule: DailySchedule(start: LocalDate(2026, 12, 1)),
         ),
         throwsStateError,
       );
@@ -133,9 +141,11 @@ void main() {
           habitId: 'past',
           versionId: 'pv',
           auditId: 'pa',
+          lifecycleEventId: 'lp',
           name: 'Read',
           effectiveDate: DateTime(2026, 11, 25),
           target: target,
+          schedule: DailySchedule(start: LocalDate(2026, 11, 25)),
         ),
         throwsStateError,
       );
@@ -143,9 +153,11 @@ void main() {
         habitId: 'h',
         versionId: 'v1',
         auditId: 'a1',
+        lifecycleEventId: 'l1',
         name: 'Read',
         effectiveDate: DateTime(2026, 11, 26),
         target: target,
+        schedule: DailySchedule(start: LocalDate(2026, 11, 26)),
       );
       await expectLater(
         writer.scheduleVersion(
@@ -155,6 +167,7 @@ void main() {
           name: 'Changed',
           effectiveDate: DateTime(2026, 11, 26),
           target: target,
+          schedule: DailySchedule(start: LocalDate(2026, 11, 26)),
         ),
         throwsStateError,
       );
@@ -193,9 +206,11 @@ void main() {
         habitId: 'h',
         versionId: 'v1',
         auditId: 'a1',
+        lifecycleEventId: 'l1',
         name: 'Read',
         effectiveDate: DateTime(2026, 11, 26),
         target: target,
+        schedule: DailySchedule(start: LocalDate(2026, 11, 26)),
       );
       await expectLater(
         writer.scheduleVersion(
@@ -205,6 +220,7 @@ void main() {
           name: 'Changed',
           effectiveDate: DateTime(2026, 12, 1),
           target: target,
+          schedule: DailySchedule(start: LocalDate(2026, 12, 1)),
         ),
         throwsA(isA<Exception>()),
       );
@@ -253,6 +269,7 @@ void main() {
       );
       await db.close();
       final legacy = sqlite3.open(file.path);
+      legacy.execute('DROP TABLE habit_lifecycle_events');
       legacy.execute('DROP TABLE habit_schedules');
       legacy.execute('DROP TABLE habit_counter_events');
       legacy.execute('DROP TRIGGER habit_versions_protect_occurrences');
@@ -277,7 +294,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        6,
+        7,
       );
       expect(
         (await migrated

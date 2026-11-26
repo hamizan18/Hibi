@@ -5,6 +5,9 @@ import 'package:drift/drift.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
 import '../domain/counter_target.dart';
+import '../domain/habit_schedule.dart';
+import 'habit_lifecycle.dart';
+import 'habit_schedule_store.dart';
 import 'counter_target_store.dart';
 
 /// Internal write path; historical corrections and user-facing editing are not supported.
@@ -18,9 +21,11 @@ class CounterHabitWriter {
     required String habitId,
     required String versionId,
     required String auditId,
+    required String lifecycleEventId,
     required String name,
     required DateTime effectiveDate,
     required CounterTarget target,
+    required HabitSchedule schedule,
   }) => _database.transaction(() async {
     final now = _clock.now();
     final start = _dateKey(effectiveDate);
@@ -29,12 +34,28 @@ class CounterHabitWriter {
         'Backdated habit creation requires a correction workflow',
       );
     }
+    final firstDate = LocalDate(
+      effectiveDate.year,
+      effectiveDate.month,
+      effectiveDate.day,
+    );
+    if (schedule.endExclusive != null &&
+        schedule.endExclusive!.compareTo(firstDate) <= 0) {
+      throw ArgumentError('Schedule ends before the habit can start');
+    }
     final timestamp = now.toUtc().microsecondsSinceEpoch;
     await _database.customStatement(
       'INSERT INTO habits (id, created_at_utc_us) VALUES (?, ?)',
       [habitId, timestamp],
     );
     await _insertVersion(habitId, versionId, name, start, 1, timestamp, target);
+    await HabitScheduleStore(_database).insert(versionId, schedule);
+    await HabitLifecycleStore(_database, _CapturedClock(now)).append(
+      id: lifecycleEventId,
+      habitId: habitId,
+      effectiveDate: firstDate,
+      state: HabitLifecycleState.active,
+    );
     await _writeAudit(auditId, habitId, 'create', null, {
       'version_id': versionId,
       'name': name,
@@ -43,6 +64,12 @@ class CounterHabitWriter {
       'revision': 1,
       'target_count': target.count,
       'unit': target.unit,
+      'schedule': _scheduleValues(schedule),
+      'lifecycle': {
+        'event_id': lifecycleEventId,
+        'state': 'active',
+        'effective_date': start,
+      },
     }, timestamp);
   });
 
@@ -53,6 +80,7 @@ class CounterHabitWriter {
     required String name,
     required DateTime effectiveDate,
     required CounterTarget target,
+    required HabitSchedule schedule,
   }) => _database.transaction(() async {
     final now = _clock.now();
     final start = _dateKey(effectiveDate);
@@ -60,6 +88,15 @@ class CounterHabitWriter {
       throw StateError(
         'Current or backdated changes require a correction workflow',
       );
+    }
+    final versionStart = LocalDate(
+      effectiveDate.year,
+      effectiveDate.month,
+      effectiveDate.day,
+    );
+    if (schedule.endExclusive != null &&
+        schedule.endExclusive!.compareTo(versionStart) <= 0) {
+      throw ArgumentError('Schedule ends before the version can start');
     }
     final row = await _database
         .customSelect(
@@ -85,6 +122,8 @@ class CounterHabitWriter {
     }
     final oldId = row.read<String>('id');
     final revision = row.read<int>('revision');
+    final scheduleStore = HabitScheduleStore(_database);
+    final previousSchedule = await scheduleStore.findForVersion(oldId);
     final oldValues = <String, Object?>{
       'version_id': oldId,
       'name': row.read<String>('name'),
@@ -93,6 +132,9 @@ class CounterHabitWriter {
       'revision': revision,
       'target_count': row.read<int>('target_count'),
       'unit': row.read<String>('unit'),
+      'schedule': previousSchedule == null
+          ? null
+          : _scheduleValues(previousSchedule),
     };
     final timestamp = now.toUtc().microsecondsSinceEpoch;
     await _database.customStatement(
@@ -108,6 +150,7 @@ class CounterHabitWriter {
       timestamp,
       target,
     );
+    await scheduleStore.insert(versionId, schedule);
     await _writeAudit(auditId, habitId, 'schedule_version', oldValues, {
       'closed_version': {...oldValues, 'effective_end': start},
       'new_version': {
@@ -118,6 +161,7 @@ class CounterHabitWriter {
         'revision': revision + 1,
         'target_count': target.count,
         'unit': target.unit,
+        'schedule': _scheduleValues(schedule),
       },
     }, timestamp);
   });
@@ -169,4 +213,30 @@ String _dateKey(DateTime date) {
     throw RangeError.range(date.year, 1, 9999, 'year');
   }
   return '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+String _localDateKey(LocalDate date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+Map<String, Object?> _scheduleValues(HabitSchedule schedule) => {
+  'recurrence': switch (schedule) {
+    DailySchedule() => 'daily',
+    WeekdaySchedule() => 'weekdays',
+  },
+  'start_date': _localDateKey(schedule.start),
+  'end_exclusive': schedule.endExclusive == null
+      ? null
+      : _localDateKey(schedule.endExclusive!),
+  'weekdays': switch (schedule) {
+    DailySchedule() => null,
+    WeekdaySchedule(:final weekdays) => weekdays.toList()..sort(),
+  },
+};
+
+class _CapturedClock implements AppClock {
+  const _CapturedClock(this.instant);
+  final DateTime instant;
+
+  @override
+  DateTime now() => instant;
 }

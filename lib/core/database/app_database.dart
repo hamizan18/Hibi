@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -42,10 +42,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createHabitAuditSchema();
       await _createOccurrenceSchema();
       await _createScheduleSchema();
+      await _createLifecycleSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 5 || to != 6) {
+      if (from < 1 || from > 6 || to != 7) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -53,7 +54,8 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 2) await _createCounterTargetSchema();
         if (from <= 3) await _createHabitAuditSchema();
         if (from <= 4) await _createOccurrenceSchema();
-        await _createScheduleSchema();
+        if (from <= 5) await _createScheduleSchema();
+        await _createLifecycleSchema();
       });
     },
     beforeOpen: (details) async {
@@ -292,6 +294,47 @@ class AppDatabase extends GeneratedDatabase {
         SELECT RAISE(ABORT, 'schedule correction workflow required');
       END
     ''');
+  }
+
+  Future<void> _createLifecycleSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_lifecycle_events (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        effective_date TEXT NOT NULL CHECK (
+          effective_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(effective_date, 1, 4) >= '0001'
+          AND date(effective_date, '+0 days') IS effective_date
+        ),
+        previous_state TEXT CHECK (previous_state IS NULL OR previous_state IN
+          ('scheduled', 'active', 'paused', 'archived', 'deleted')),
+        state TEXT NOT NULL CHECK (state IN
+          ('scheduled', 'active', 'paused', 'archived', 'deleted')),
+        reason TEXT,
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        UNIQUE (habit_id, effective_date)
+      )
+    ''');
+    await customStatement('''
+      CREATE TRIGGER habit_lifecycle_no_retroactive_occurrences
+      BEFORE INSERT ON habit_lifecycle_events
+      WHEN EXISTS (
+        SELECT 1 FROM habit_occurrences
+        WHERE habit_id = NEW.habit_id AND local_date >= NEW.effective_date
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'lifecycle correction workflow required');
+      END
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_lifecycle_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_lifecycle_events
+        BEGIN
+          SELECT RAISE(ABORT, 'lifecycle correction workflow required');
+        END
+      ''');
+    }
   }
 
   Future<String?> getSetting(String key) async {

@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; daily/weekday recurrence and low-level versioned schedule persistence exist, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal initial and future counter versions now require explicit schedules, but habit tracking is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 6, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences and events; foreign keys enabled and unsupported migrations rejected.
+- Riverpod and GoRouter; Drift/SQLite version 7, including settings, habit identity, versioned counter targets and schedules, audit, counter occurrences/events and lifecycle history; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -109,10 +109,36 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting completed, analysis passed and all 30 tests passed.
 - Migration and storage tests used isolated local databases; Android migration and integration tests were not run. The store is not integrated with the habit writer, lifecycle, occurrence generation, audit or UI.
 
+### Milestone 1: lifecycle and applicability
+
+- At session start `git status --short --branch` showed clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 30 tests.
+- Added version-7 effective-dated lifecycle events, `HabitLifecycleStore`, and `HabitApplicabilityReader`. A known paused/archived/deleted/scheduled state is not applicable; absent necessary lifecycle/version/schedule is `unknown`, never a failure. Existing habits receive no inferred lifecycle events.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits\data\habit_lifecycle.dart test && flutter.bat test test\habit_lifecycle_test.dart test\habit_schedule_store_test.dart test\occurrence_schema_test.dart test\database_test.dart test\habit_schema_test.dart test\counter_target_test.dart test\counter_habit_writer_test.dart"`: 26 targeted tests passed.
+- Temporary smoke: `cmd.exe /c "flutter.bat test test\_lifecycle_smoke_test.dart"` passed one test; the file was removed.
+- First `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"` stopped at analysis with two curly-braces lint infos. Fixed both and added a partial-migration rollback test. Rerunning the same command passed formatting, analysis and all 35 tests.
+- Isolated tests cover before-start, pause/resume/archive/delete/restore, schedule and version boundaries, unknown data, forbidden backdating and reinterpretation, and migration preservation/rollback. Android migration and integration tests were not run. No user-facing lifecycle, occurrence generation or notification updates exist.
+
+### Milestone 1: complete initial counter creation
+
+- At session start `git status --short --branch` showed existing modified documentation, database/tests and untracked lifecycle files; those changes were preserved. `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 35 tests before this session's changes.
+- Updated `CounterHabitWriter.create` to require an explicit schedule and lifecycle event ID. Identity, version, target, schedule, active lifecycle event and creation audit are written in one transaction using one captured clock instant; future starts are not applicable before the selected date. No scheduled event or schedule default is inferred.
+- `cmd.exe /c "dart.bat format lib\features\habits\data\counter_habit_writer.dart test\counter_habit_writer_test.dart && flutter.bat test test\counter_habit_writer_test.dart"`: 5 tests passed. `cmd.exe /c "dart.bat format test\counter_habit_creation_test.dart && flutter.bat test test\counter_habit_creation_test.dart test\counter_habit_writer_test.dart"`: 9 tests passed.
+- Temporary smoke `cmd.exe /c "flutter.bat test test\_counter_creation_smoke_test.dart"`: one test passed; file removed.
+- `cmd.exe /c "dart.bat format lib\features\habits\data\counter_habit_writer.dart test\counter_habit_writer_test.dart test\counter_habit_creation_test.dart && flutter.bat analyze && flutter.bat test"`: formatting completed, analysis passed and all 40 tests passed.
+- Isolated tests cover selected schedules, date boundaries, one clock read, creation audit, failure at schedule/lifecycle/audit writes, preservation of preexisting data, unknown legacy configuration and database reopen. Android/integration tests were not run.
+
+### Milestone 1: future counter-version schedules
+
+- At session start `git status --short --branch` showed existing modified and untracked user files; these were preserved. Before changes, `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed analysis and all 40 tests.
+- `CounterHabitWriter.scheduleVersion` now requires an explicit schedule, rejects one ending on or before the version start and stores it in the same transaction as version boundaries, target and before/after audit. Previous schedules remain attached to their versions; a missing prior schedule remains missing and is audited as null.
+- `cmd.exe /c "dart.bat format lib\features\habits\data\counter_habit_writer.dart test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart && flutter.bat test test\counter_habit_writer_test.dart test\counter_habit_future_schedule_test.dart"`: formatting completed and 9 targeted tests passed.
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: 22 files unchanged, analysis passed and all 44 tests passed.
+- Isolated tests cover version boundaries, historical occurrence and schedule preservation, audit snapshots, absent legacy schedules, rejected expired schedules and rollback for schedule/audit failure or a conflicting occurrence. Android and integration tests were not run; no schema migration or production data was added.
+
 ## Limitations
 
-Database, occurrence data and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Only daily/weekday schedule evaluation and low-level persistence exist; lifecycle, recurrence-aware occurrence generation, status and audited logging are not implemented. Missing rows or events do not establish success or failure. Schema guards do not implement correction or permanent privacy deletion. Raw SQL and low-level stores bypass application-level audit. No release signing or final application ID has been configured.
+Database, occurrence data, lifecycle reasons and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Lifecycle, notifications, occurrence generation, status and UI are not integrated into an operational habit workflow. Missing rows or events do not establish success or failure. Schema guards do not implement historical correction or permanent privacy deletion. Raw SQL and low-level stores bypass transition/audit safeguards. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design and implement versioned lifecycle events and an applicability evaluator that combines lifecycle, habit version and stored schedule, with isolated tests; do not generate occurrences until the combined rules are verified.
+Implement an internal, transactional, idempotent counter occurrence retrieval/creation path for a requested local date, using applicability and the correct version/target snapshot; explicitly preserve unknown and not-applicable outcomes. Test repeated requests, version boundaries, pauses and existing data; do not expose UI or infer completion/failure.
