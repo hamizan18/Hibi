@@ -2,20 +2,20 @@
 
 ## Current state
 
-Milestone 0 is accepted. Milestone 1 remains in progress: identity, dated name versions and counter target storage exist, but habit tracking is not operational.
+Milestone 0 is accepted. Milestone 1 remains in progress: internal audited counter habit creation and strictly future version scheduling exist; habit tracking is not operational.
 
 ## Latest work
 
-Added `CounterTarget`, `CounterTargetStore`, schema version 3 with per-version counter targets, transactional 1→3/2→3 migration, and `test/counter_target_test.dart`. Updated the existing database and schema tests and affected documentation. No UI or production records were added.
+Added `CounterHabitWriter`, schema version 4 and `habit_version_audit`, and `test/counter_habit_writer_test.dart`. Updated migration tests and documentation. The writer is not wired to UI; no production records were created.
 
 ## Decisions and constraints
 
-See DECISIONS.md and DATABASE_SCHEMA.md. Counter targets are positive whole signed 64-bit integers with nonblank units, not floating point. Existing versions without a target stay unconfigured. The low-level store does not implement audit or correction authorization; do not expose edits until those protections exist. SQLite is not encrypted; `com.example.hibi` remains a development placeholder.
+See DECISIONS.md and DATABASE_SCHEMA.md. The writer rejects same-day and backdated changes and writes target/version/audit in one transaction; IDs are supplied by the caller and the clock is injected. Direct SQL and `CounterTargetStore` can bypass it. Audit snapshots contain private habit names, units and targets in unencrypted SQLite; no privacy controls or deletion workflow exist.
 
 ## Verification and blockers
 
-Before the change, analysis and all 9 tests passed. After the change, formatting, analysis and all 13 tests passed. Isolated local database tests cover migrations, rollback, counter validation, version-specific targets and reopening. Android migration and integration tests were not run. Milestone 1 is incomplete.
+Before changes, analysis and 13 tests passed. After changes, `dart format .`, `flutter analyze`, and all 17 tests passed. Tests cover isolated schema migration, version history, audit snapshots, backdated rejection and transactional rollback. Android migration and integration tests were not run. Milestone 1 remains incomplete.
 
 ## Next bounded task
 
-Design and implement transactional, audited habit-version creation and correction safeguards before connecting the counter target store to user-facing edits.
+Design the explicit historical correction workflow with affected-range preview and confirmation, transactional audit and recalculation boundaries; do not expose edits until safeguards are complete.

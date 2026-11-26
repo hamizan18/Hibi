@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -39,15 +39,17 @@ class AppDatabase extends GeneratedDatabase {
       ''');
       await _createHabitSchema();
       await _createCounterTargetSchema();
+      await _createHabitAuditSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 2 || to != 3) {
+      if (from < 1 || from > 3 || to != 4) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
         if (from == 1) await _createHabitSchema();
-        await _createCounterTargetSchema();
+        if (from <= 2) await _createCounterTargetSchema();
+        await _createHabitAuditSchema();
       });
     },
     beforeOpen: (details) async {
@@ -116,6 +118,23 @@ class AppDatabase extends GeneratedDatabase {
       unit TEXT NOT NULL CHECK (length(trim(unit)) > 0)
     )
   ''');
+
+  Future<void> _createHabitAuditSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_version_audit (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        operation TEXT NOT NULL CHECK (operation IN ('create', 'schedule_version')),
+        previous_values TEXT,
+        updated_values TEXT NOT NULL,
+        occurred_at_utc_us INTEGER NOT NULL
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_version_audit_by_habit_time
+      ON habit_version_audit (habit_id, occurred_at_utc_us)
+    ''');
+  }
 
   Future<String?> getSetting(String key) async {
     final row = await customSelect(

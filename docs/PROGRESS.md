@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; identity, dated name versions and counter target storage exist, but the habit engine is not operational.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; internal counter version creation and future scheduling with audit exist, but the habit engine is not operational.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 3, including settings, habit identity/name versions and counter target storage; foreign keys enabled, injected executor, unsupported migrations rejected, and visible database initialization errors.
+- Riverpod and GoRouter; Drift/SQLite version 4, including settings, habit identity, name versions, counter target storage and habit-version audit; foreign keys enabled and unsupported migrations rejected.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -66,10 +66,19 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 - `cmd.exe /c "dart.bat format lib\features\habits test\counter_target_test.dart && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting passed, analysis passed, all 13 tests passed.
 - Tests used isolated local databases. Android migration and integration tests were not run. User-facing counter creation, progress recording, correction and audit remain unimplemented.
 
+### Milestone 1: transactional counter version writes
+
+- Before changes, `git status --short --branch` was clean on `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 13 tests.
+- Added `CounterHabitWriter` with an injected clock and caller-supplied IDs. Initial counter habit creation and strictly future version append write habit/version/target and before/after audit snapshots transactionally. Same-day and backdated changes are rejected; no historical correction workflow or UI is provided.
+- Schema version 4 creates `habit_version_audit` with an index. Migrations from 1, 2 and 3 run in transactions and do not infer audit history for previous records.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart lib\features\habits\data\counter_habit_writer.dart test && flutter.bat test test\counter_habit_writer_test.dart test\counter_target_test.dart test\habit_schema_test.dart test\database_test.dart"`: 14 tests passed.
+- `cmd.exe /c "dart.bat format . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed and 17 tests passed.
+- Isolated database tests cover version-3 migration preserving settings/target, before/after audit snapshots, rejection of backdated writes and rollback on audit insertion failure. Android migration and integration tests were not run.
+
 ## Limitations
 
-Database is not encrypted; privacy and backup features do not exist yet. Habit tracking, non-counter targets, scheduling, lifecycle, audit, and correction workflows remain unimplemented; the low-level target store and raw schema do not authorize historical edits. No release signing or final application ID has been configured.
+Database and audit snapshots are unencrypted; private-view access control and privacy deletion are not implemented. Habit UI, counter logging, scheduling, lifecycle and historical correction preview, confirmation and recalculation are not implemented. Raw SQL and the low-level target store bypass the writer's safeguards. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design and implement transactional, audited habit-version creation and correction safeguards before connecting the low-level counter target store to user-facing edits.
+Design the explicit historical correction workflow: affected-range preview and confirmation, transactional audit of old/new values, and recalculation boundaries, before exposing habit edits in the UI.
