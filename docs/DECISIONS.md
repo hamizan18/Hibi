@@ -23,3 +23,7 @@ Context: the foundation needs persistence without creating future feature tables
 ## ADR-006: Local date presentation — 2026-11-26
 
 Context: the foundation only displays one Japanese-style date format. Decision: use a small weekday mapping and an injected local clock; recalculate on resume and at the next local midnight. Alternative: introduce Intl as a direct dependency for this single format. Consequence: add Intl if later formatting requirements justify it; historical date storage remains a separate future responsibility.
+
+## ADR-007: Dated habit identity schema — 2026-11-26
+
+Context: habit identity and historical configuration must be separated without destroying existing settings. Decision: schema version 2 adds identity and name-version tables via an explicit transactional migration; ISO local dates use inclusive starts and exclusive ends, with SQLite overlap triggers and unique per-habit revision numbers. UTC creation instants use integer microseconds since the Unix epoch. Alternative: overwrite habit names or rely on application-only interval checks. Consequences: adjacent versions are valid and overlapping intervals are rejected even through direct SQL; application-level correction, auditing, typed target configuration and lifecycle rules remain necessary before exposing habit writes. Do not treat this partial schema as the completed habit engine.

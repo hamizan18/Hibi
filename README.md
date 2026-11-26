@@ -4,7 +4,7 @@ Small steps, every day. An offline-first personal life management application fo
 
 ## Status
 
-Milestone 0 foundation acceptance is verified. Milestone 1 is next and has not started. Habit tracking, history, finance and other product features are not implemented yet. See `docs/PROGRESS.md` and `docs/ROADMAP.md`.
+Milestone 0 foundation acceptance is verified. Milestone 1 is in progress: only initial habit database schema exists. Habit tracking, history, finance and other product features are not operational yet. See `docs/PROGRESS.md` and `docs/ROADMAP.md`.
 
 ## Development
 

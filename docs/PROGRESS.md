@@ -2,13 +2,13 @@
 
 ## Active milestone
 
-Milestone 0 — Project Foundation: accepted against its foundation criteria. Milestone 1 — Dynamic Habit Engine is next and has not been started.
+Milestone 0 is accepted. Milestone 1 — Dynamic Habit Engine is in progress; only the initial identity and effective-dated name schema is implemented, not the habit engine.
 
 ## Implemented
 
 - Existing Flutter template adapted for Hibi; Android development ID remains `com.example.hibi`.
 - Material 3 dark theme, five navigable destinations explicitly marked unavailable where appropriate, Japanese-style local date, injectable clock, midnight and resume refresh.
-- Riverpod and GoRouter; Drift/SQLite version 1 settings table, foreign keys enabled, injected executor, explicit failure for unsupported upgrades; visible database initialization error.
+- Riverpod and GoRouter; Drift/SQLite version 2, including the settings table and initial habit identity/name-version schema; foreign keys enabled, injected executor, unsupported migrations rejected, and visible database initialization errors.
 - Foundation widget, date and isolated database tests; permanent documentation.
 
 ## Verification
@@ -48,10 +48,19 @@ Milestone 0 — Project Foundation: accepted against its foundation criteria. Mi
 
 Milestone 0 acceptance: Android launch and five navigation destinations visually checked in the previous session; database initialization and isolated restart persistence checked on Android; analysis and foundation tests passed. The probe was a temporary test app, not a `flutter test integration_test` suite. No device reboot, production-data mutation, broader accessibility audit, or future feature is implied by this result.
 
+### Milestone 1: habit identity schema
+
+- Before changes, `git status --short --branch` reported a clean `main...origin/main`; `cmd.exe /c "flutter.bat analyze && flutter.bat test"` passed with 6 tests.
+- Added `habits` and `habit_versions`, indexed half-open effective dates, non-overlap triggers, valid-date checks, foreign key and revision constraints. Only versioned names and revision metadata are implemented; no habit write API or user interface is exposed.
+- Added transactional schema migration 1→2 without replacing settings; unknown version transitions fail. Database tests verify old settings survive migration and reopen, failed migration rolls back, history resolves correctly, and overlap/date/foreign-key/revision violations are rejected.
+- `cmd.exe /c "dart.bat format lib\core\database\app_database.dart test\database_test.dart test\habit_schema_test.dart && flutter.bat test test\habit_schema_test.dart test\database_test.dart"`: 6 tests passed.
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test"`: formatting unchanged, analysis passed, all 9 tests passed.
+- Migration tests used isolated local SQLite files, not the device's actual user database. Android-specific migration and full milestone acceptance remain unverified.
+
 ## Limitations
 
-Database is not encrypted; privacy and backup features do not exist yet. No habit, finance or other future feature is implemented. No release signing or final application ID has been configured. See the latest handoff for current Android verification.
+Database is not encrypted; privacy and backup features do not exist yet. Habit tracking, configuration targets, scheduling, lifecycle, audit, and correction workflows remain unimplemented; raw schema constraints do not by themselves prevent unauthorized historical edits. No release signing or final application ID has been configured.
 
 ## Next bounded task
 
-Design the Milestone 1 habit identity and effective-dated configuration schema and its migration with tests, before adding habit UI.
+Design and implement typed, versioned target configuration for an initial tracking type, with explicit precision and tests; do not expose user-facing habit edits until transaction and historical correction protections exist.
