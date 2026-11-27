@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 13 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 14 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -91,6 +91,14 @@ Schema version 13 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_lifecycle_start_pauses` | `initial_event_id` | TEXT | NOT NULL, UNIQUE, foreign key to `habit_lifecycle_events(id)`, ON DELETE RESTRICT |
 | `habit_lifecycle_start_pauses` | `created_at_utc_us` | INTEGER | NOT NULL; UTC Unix microseconds |
 | `habit_lifecycle_start_pauses` | `reason` | TEXT | NULL or user-provided reason |
+| `finance_wallets` | `id`, `name`, `opening_balance_idr`, `opening_date`, `is_archived`, `created_at_utc_us` | TEXT / INTEGER | Integer IDR opening balance, ISO date, nonblank name |
+| `finance_categories` | `id`, `name`, `kind`, `is_archived`, `created_at_utc_us` | TEXT / INTEGER | `kind` in (`income`, `expense`), `UNIQUE (name, kind)` |
+| `finance_transactions` | `id`, `wallet_id`, `category_id`, `type`, `amount_idr`, `local_date`, `note`, `is_deleted`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Positive integer IDR; triggers require `category.kind = type`; income/expense only |
+| `finance_transfers` | `id`, `from_wallet_id`, `to_wallet_id`, `amount_idr`, `local_date`, `note`, `is_deleted`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Positive integer IDR; `CHECK (from_wallet_id != to_wallet_id)`; never income/expense |
+| `finance_budgets` | `id`, `category_id`, `period_start`, `period_end_inclusive`, `limit_idr`, `rollover_enabled`, `rollover_carry_idr`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Positive integer IDR; `period_end_inclusive >= period_start`; triggers enforce expense categories only; `rollover_carry_idr = 0` when rollover disabled |
+| `finance_audit` | `id`, `entity_type`, `entity_id`, `operation`, `previous_values`, `updated_values`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable before/after JSON snapshots for wallet/category/transaction/transfer/budget writes (update/delete triggers abort) |
+
+Schema v14 adds the six Finance tables, indexes and triggers transactionally when upgrading from versions 1–13 without modifying existing settings or habit data. SQLite remains unencrypted at rest.
 
 Schema v13 migrates typed targets transactionally to accept `at_or_near` and adds nullable `day_offset` to existing typed logs. No scoring configurations or offsets are inferred for old records. Configuration writes require a matching typed target; triggers block changes when a typed occurrence already references the version. Creation and future-version audit snapshots include the explicitly persisted scoring configuration. Historical scores without supported configuration are N/A, while raw records and stored completion statuses remain unchanged.
 

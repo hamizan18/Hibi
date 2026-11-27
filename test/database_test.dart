@@ -31,7 +31,7 @@ void main() {
     final version = await database
         .customSelect('PRAGMA user_version')
         .getSingle();
-    expect(version.read<int>('user_version'), 13);
+    expect(version.read<int>('user_version'), 14);
     final foreignKeys = await database
         .customSelect('PRAGMA foreign_keys')
         .getSingle();
@@ -145,7 +145,7 @@ void main() {
     expect(
       (await reopened.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      13,
+      14,
     );
     expect(
       (await reopened
@@ -334,7 +334,7 @@ void main() {
     expect(
       (await reopened.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      13,
+      14,
     );
     await reopened.close();
   });

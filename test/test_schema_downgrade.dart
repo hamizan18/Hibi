@@ -1,7 +1,18 @@
 import 'package:sqlite3/sqlite3.dart';
 
+/// Drops schema version 14 Finance tables for legacy migration fixtures.
+void dropV14Schema(Database db) {
+  db.execute('DROP TABLE IF EXISTS finance_audit');
+  db.execute('DROP TABLE IF EXISTS finance_budgets');
+  db.execute('DROP TABLE IF EXISTS finance_transfers');
+  db.execute('DROP TABLE IF EXISTS finance_transactions');
+  db.execute('DROP TABLE IF EXISTS finance_categories');
+  db.execute('DROP TABLE IF EXISTS finance_wallets');
+}
+
 /// Reconstructs the pre-scoring v12 schema for migration fixtures.
 void dropV13Schema(Database db) {
+  dropV14Schema(db);
   db.execute('DROP TRIGGER habit_typed_targets_protect_scoring_update');
   db.execute('DROP TRIGGER habit_typed_targets_protect_scoring_delete');
   db.execute('DROP TABLE habit_version_scoring');
@@ -23,8 +34,9 @@ void dropV13Schema(Database db) {
   db.execute('DROP TABLE habit_typed_targets_v13');
 }
 
-/// Drops schema versions 11 through 13 for legacy migration fixtures.
+/// Drops schema versions 11 through 14 for legacy migration fixtures.
 void dropV11Tables(Database db) {
+  dropV14Schema(db);
   db.execute(
     'DROP TRIGGER IF EXISTS habit_typed_targets_protect_scoring_update',
   );

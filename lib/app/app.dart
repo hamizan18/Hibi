@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/database/app_database.dart';
 import '../core/services/app_clock.dart';
+import '../features/finance/presentation/finance_screen.dart';
 import '../features/habits/domain/habit_schedule.dart';
 import '../features/habits/presentation/habit_builder_screen.dart';
 import '../features/habits/presentation/history_analytics_screen.dart';
@@ -152,6 +153,8 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                           ? 'Welcome to Hibi'
                           : widget.index == 1
                           ? 'History & Analytics'
+                          : widget.index == 2
+                          ? 'Finance (IDR)'
                           : widget.index == 4
                           ? 'More'
                           : '${destination.label} is not available yet',
@@ -163,6 +166,8 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                           ? 'Your habits stay on this device.'
                           : widget.index == 1
                           ? 'Deterministic calendar, weighted score, recording coverage, heatmaps, streaks and reports.'
+                          : widget.index == 2
+                          ? 'Integer IDR wallets, transactions, atomic transfers, expense budgets and audited reports.'
                           : widget.index == 4
                           ? 'Create a habit below. Other features are not available yet.'
                           : 'This section is planned for a future milestone.',
@@ -181,6 +186,13 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
             if (widget.index == 1) ...[
               const SizedBox(height: 16),
               HistoryAnalyticsView(
+                key: ValueKey(_rosterRevision),
+                asOfDate: LocalDate(_now.year, _now.month, _now.day),
+              ),
+            ],
+            if (widget.index == 2) ...[
+              const SizedBox(height: 16),
+              FinanceView(
                 key: ValueKey(_rosterRevision),
                 asOfDate: LocalDate(_now.year, _now.month, _now.day),
               ),

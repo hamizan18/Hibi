@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -49,10 +49,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createV11Schemas();
       await _createLifecycleStartPauseSchema();
       await _createScoringSchema();
+      await _createFinanceSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 12 || to != 13) {
+      if (from < 1 || from > 13 || to != 14) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -73,9 +74,10 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 11) await _createLifecycleStartPauseSchema();
         if (from <= 10) {
           await _createScoringSchema();
-        } else {
+        } else if (from <= 12) {
           await _upgradeToV13();
         }
+        if (from <= 13) await _createFinanceSchema();
       });
     },
     beforeOpen: (details) async {
@@ -940,6 +942,168 @@ class AppDatabase extends GeneratedDatabase {
         CHECK (day_offset IS NULL OR (typeof(day_offset) = 'integer' AND day_offset BETWEEN -1 AND 1))
     ''');
     await _createScoringSchema();
+  }
+
+  Future<void> _createFinanceSchema() async {
+    await customStatement('''
+      CREATE TABLE finance_wallets (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        opening_balance_idr INTEGER NOT NULL CHECK (typeof(opening_balance_idr) = 'integer'),
+        opening_date TEXT NOT NULL CHECK (
+          opening_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(opening_date, 1, 4) >= '0001'
+          AND date(opening_date, '+0 days') IS opening_date
+        ),
+        is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer')
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE finance_categories (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        kind TEXT NOT NULL CHECK (kind IN ('income', 'expense')),
+        is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        UNIQUE (name, kind)
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE finance_transactions (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        wallet_id TEXT NOT NULL REFERENCES finance_wallets(id) ON DELETE RESTRICT,
+        category_id TEXT NOT NULL REFERENCES finance_categories(id) ON DELETE RESTRICT,
+        type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+        amount_idr INTEGER NOT NULL CHECK (typeof(amount_idr) = 'integer' AND amount_idr > 0),
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        note TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_transactions_by_date
+      ON finance_transactions (local_date, id)
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_transactions_by_wallet
+      ON finance_transactions (wallet_id, local_date)
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_transactions_by_category
+      ON finance_transactions (category_id, local_date)
+    ''');
+    for (final op in ['INSERT', 'UPDATE']) {
+      await customStatement('''
+        CREATE TRIGGER finance_transactions_validate_category_${op.toLowerCase()}
+        BEFORE $op ON finance_transactions
+        WHEN NOT EXISTS (
+          SELECT 1 FROM finance_categories c
+          WHERE c.id = NEW.category_id AND c.kind = NEW.type
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'transaction category kind must match transaction type');
+        END
+      ''');
+    }
+
+    await customStatement('''
+      CREATE TABLE finance_transfers (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        from_wallet_id TEXT NOT NULL REFERENCES finance_wallets(id) ON DELETE RESTRICT,
+        to_wallet_id TEXT NOT NULL REFERENCES finance_wallets(id) ON DELETE RESTRICT,
+        amount_idr INTEGER NOT NULL CHECK (typeof(amount_idr) = 'integer' AND amount_idr > 0),
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        note TEXT,
+        is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer'),
+        CHECK (from_wallet_id != to_wallet_id)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_transfers_by_date
+      ON finance_transfers (local_date, id)
+    ''');
+
+    await customStatement('''
+      CREATE TABLE finance_budgets (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        category_id TEXT NOT NULL REFERENCES finance_categories(id) ON DELETE RESTRICT,
+        period_start TEXT NOT NULL CHECK (
+          period_start GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(period_start, 1, 4) >= '0001'
+          AND date(period_start, '+0 days') IS period_start
+        ),
+        period_end_inclusive TEXT NOT NULL CHECK (
+          period_end_inclusive GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(period_end_inclusive, 1, 4) >= '0001'
+          AND date(period_end_inclusive, '+0 days') IS period_end_inclusive
+          AND period_end_inclusive >= period_start
+        ),
+        limit_idr INTEGER NOT NULL CHECK (typeof(limit_idr) = 'integer' AND limit_idr > 0),
+        rollover_enabled INTEGER NOT NULL DEFAULT 0 CHECK (rollover_enabled IN (0, 1)),
+        rollover_carry_idr INTEGER NOT NULL DEFAULT 0 CHECK (typeof(rollover_carry_idr) = 'integer'),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer'),
+        CHECK (rollover_enabled = 1 OR rollover_carry_idr = 0)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_budgets_by_category_period
+      ON finance_budgets (category_id, period_start, period_end_inclusive)
+    ''');
+    for (final op in ['INSERT', 'UPDATE']) {
+      await customStatement('''
+        CREATE TRIGGER finance_budgets_validate_expense_${op.toLowerCase()}
+        BEFORE $op ON finance_budgets
+        WHEN NOT EXISTS (
+          SELECT 1 FROM finance_categories c
+          WHERE c.id = NEW.category_id AND c.kind = 'expense'
+        )
+        BEGIN
+          SELECT RAISE(ABORT, 'budgets apply to expense categories only');
+        END
+      ''');
+    }
+
+    await customStatement('''
+      CREATE TABLE finance_audit (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        entity_type TEXT NOT NULL CHECK (entity_type IN ('wallet', 'category', 'transaction', 'transfer', 'budget')),
+        entity_id TEXT NOT NULL CHECK (length(trim(entity_id)) > 0),
+        operation TEXT NOT NULL CHECK (operation IN ('create', 'update', 'archive', 'delete')),
+        previous_values TEXT,
+        updated_values TEXT NOT NULL CHECK (length(trim(updated_values)) > 0),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX finance_audit_by_entity_time
+      ON finance_audit (entity_type, entity_id, occurred_at_utc_us)
+    ''');
+    for (final op in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER finance_audit_no_${op.toLowerCase()}
+        BEFORE $op ON finance_audit
+        BEGIN
+          SELECT RAISE(ABORT, 'finance audit records are immutable');
+        END
+      ''');
+    }
   }
 
   Future<String?> getSetting(String key) async {

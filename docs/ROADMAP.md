@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 is accepted. Milestone 1 habits and Milestone 2 History/Analytics, including Dynamic Normalized Scoring, are implemented and have host tests and an Android debug APK build. The owner has explicitly not accepted Milestone 2; final audit and device verification remain outstanding. Do not start Milestone 3 without explicit Milestone 2 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
+Milestone 0, Milestone 1, and Milestone 2 are accepted by the owner. Milestone 3 (Finance) is implemented and host-verified with formatting, static analysis, 276 passing tests, and an Android debug APK build; Android device visual and migration verification remain outstanding because no Android device or emulator is attached. Do not start Milestone 4 (Journal, goals, focus) without explicit Milestone 3 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

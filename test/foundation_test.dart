@@ -32,9 +32,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('2026年11月26日(木)'), findsOneWidget);
     expect(find.text('Welcome to Hibi'), findsOneWidget);
-    await tester.tap(find.text('Finance'));
+    await tester.tap(find.text('Growth'));
     await tester.pumpAndSettle();
-    expect(find.text('Finance is not available yet'), findsOneWidget);
+    expect(find.text('Growth is not available yet'), findsOneWidget);
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
     expect(find.text('Welcome to Hibi'), findsOneWidget);
