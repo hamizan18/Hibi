@@ -2,17 +2,17 @@
 
 ## Current state
 
-**Milestone 0, Milestone 1 and Milestone 2 are accepted by the owner. Milestone 3 — Finance is implemented and verified on host (all 276 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v12 -> v14` migration, cold launch, 5-tab navigation, Finance/Growth visual layout, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 4.**
+**Milestone 0, Milestone 1, Milestone 2 and Milestone 3 are accepted by the owner. Milestone 4 — Journal, goals and focus (`R-008` / `T-008`) is implemented and verified on host (all 288 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v14 -> v15` migration, cold launch, Growth tab visual inspection, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 5.**
 
 ## Latest work
 
-Implemented Milestone 3 — Finance end-to-end (ADR-072 through ADR-076):
-- Upgraded `AppDatabase` (`lib/core/database/app_database.dart`) to schema version 14 adding `finance_wallets`, `finance_categories`, `finance_transactions`, `finance_transfers`, `finance_budgets` and immutable `finance_audit`, with transactional v1–v13 → v14 migrations.
-- Added pure integer-IDR domain models and calculators in `lib/features/finance/domain/finance_models.dart` (`checkedAddIdr`, `checkedSubIdr`, `formatIdr`, `FinanceBalanceCalculator`, `FinanceBudgetCalculator`, `FinanceReportCalculator`).
-- Added transactional `FinanceService` (`lib/features/finance/data/finance_service.dart`) and `financeServiceProvider` (`lib/features/finance/application/finance_providers.dart`).
-- Added `FinanceView` (`lib/features/finance/presentation/finance_screen.dart`) and activated `/finance` in `lib/app/app.dart` (keeping `/growth` clearly marked unavailable).
-- Added `test/finance_domain_test.dart`, `test/finance_service_test.dart`, `test/finance_screen_test.dart` and `test/milestone3_acceptance_test.dart`, updated `test/test_schema_downgrade.dart` (`dropV14Schema`), updated migration target version assertions to 14, and updated `test/foundation_test.dart` to check `Growth is not available yet`.
-- Updated `ARCHITECTURE.md`, `BUSINESS_RULES.md`, `DATABASE_SCHEMA.md`, `DECISIONS.md` (ADR-072..ADR-076), `PROJECT_SPEC.md`, `ROADMAP.md`, `PROGRESS.md` and `HANDOFF.md`.
+Implemented Milestone 4 — Journal, goals and focus end-to-end (ADR-077 through ADR-080):
+- Upgraded `AppDatabase` (`lib/core/database/app_database.dart`) to schema version 15 adding `journal_entries`, `journal_entry_tags`, `goals`, immutable `goal_status_history`, `goal_milestones`, `goal_habit_links`, `goal_progress_entries` (partial unique index on `(goal_id, source, source_ref_id)`), `focus_presets` and `focus_sessions` (persisted running deadline/elapsed state, explicit `interrupted` state/reason, partial unique indexes on linked habit/goal progress), with transactional v1–v14 → v15 migrations.
+- Added pure domain models and calculators in `lib/features/growth/domain/journal_models.dart`, `goal_models.dart` and `focus_models.dart`.
+- Added transactional `JournalService`, `GoalService`, `FocusService` (`lib/features/growth/data/`) and Riverpod providers (`lib/features/growth/application/growth_providers.dart`).
+- Added `GrowthView` (`lib/features/growth/presentation/growth_screen.dart`) and activated `/growth` (tab index 3) in `lib/app/app.dart` while keeping unfinished Milestone 5–6 features on `More` clearly marked unavailable.
+- Added `test/growth_domain_test.dart`, `test/growth_service_test.dart`, `test/growth_screen_test.dart` and `test/milestone4_acceptance_test.dart` (`T-008`), updated `test/test_schema_downgrade.dart` (`dropV15Schema`), updated all legacy migration target assertions to 15, and updated `test/foundation_test.dart`.
+- Updated `ARCHITECTURE.md`, `BUSINESS_RULES.md`, `DATABASE_SCHEMA.md`, `DECISIONS.md` (ADR-077..ADR-080), `PROJECT_SPEC.md`, `ROADMAP.md`, `PROGRESS.md` and `HANDOFF.md`.
 
 ## Decisions and constraints
 
@@ -45,9 +45,17 @@ Milestone 3 Finance verification (2026-11-27):
   - Post-upgrade `files/hibi.sqlite` header `user_version` = `14` (`00 00 00 0e`, `442,368` bytes) — real live `v12 -> v14` migration succeeded without wiping user data.
   - Navigated across all 5 bottom tabs (`Today`, `History`, `Finance`, `Growth`, `More`) and visually inspected Finance (top + scrolled bottom) and Growth screenshots: zero RenderFlex/layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`. No fake records were created in the owner's live DB; interactive Finance CRUD/restart and timezone-change testing remain for manual verification or isolated `integration_test/` in a future pass.
 
+Milestone 4 Growth verification (2026-11-27):
+- `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && flutter.bat build apk --debug"`: exited 0; 171 files formatted (0 changed), `flutter.bat analyze` found no issues (9.5s), **all 288 tests passed** (01:03, including `growth_domain_test.dart`, `growth_service_test.dart`, `growth_screen_test.dart`, `milestone4_acceptance_test.dart` and all v1..v14→v15 migration tests), and `flutter.bat build apk --debug` built `build\app\outputs\flutter-apk\app-debug.apk` (32.1s; Gradle emitted Java native-access warning).
+- Physical Android 16 (API 36) verification on `2510DRA23E` (`i7xsrs7hvgbqgyln`, `1080x2392`):
+  - `adb -s i7xsrs7hvgbqgyln install -r "build\app\outputs\flutter-apk\app-debug.apk"` succeeded in-place (`Performing Streamed Install` → `Success`).
+  - `adb -s i7xsrs7hvgbqgyln shell am start -W -n com.example.hibi/.MainActivity` cold-launched cleanly (`Status: ok`, `TotalTime: 4542` ms, Impeller Vulkan).
+  - Post-upgrade `files/hibi.sqlite` header `user_version` = `15` (`00 00 00 0f`) — real live `v14 -> v15` migration succeeded without wiping user data.
+  - Visually inspected `Growth` tab (`Journal`, `Goals`, `Focus` sections): zero layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`. No fake records were created in the owner's live DB.
+
 ## Next bounded task
 
-Await explicit owner acceptance of Milestone 3 — Finance. Once the owner explicitly approves Milestone 3, begin Milestone 4 — Journal, goals and focus (starting with schema v15 journal/mood, goals/milestones and restart-safe focus/Pomodoro tables and pure domain calculators following BUSINESS_RULES.md). Do not commit, push or start Milestone 4 without explicit owner approval.
+Await explicit owner acceptance of Milestone 4 — Journal, goals and focus. Once the owner explicitly approves Milestone 4, begin Milestone 5 — Gamification (versioned XP ledger, level formula `100 × L`, deterministic achievements with preserved unlock history, custom non-moralizing attributes and privacy opt-out following BUSINESS_RULES.md). Do not commit, push or start Milestone 5 without explicit owner approval.
 
 ## Session handoff — owner-directed pause
 

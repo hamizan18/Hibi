@@ -107,7 +107,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        14,
+        15,
       );
       expect(
         (await migrated.customSelect('PRAGMA foreign_keys').getSingle())

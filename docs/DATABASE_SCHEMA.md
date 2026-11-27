@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 14 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 15 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -97,6 +97,17 @@ Schema version 14 is defined in `lib/core/database/app_database.dart` using expl
 | `finance_transfers` | `id`, `from_wallet_id`, `to_wallet_id`, `amount_idr`, `local_date`, `note`, `is_deleted`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Positive integer IDR; `CHECK (from_wallet_id != to_wallet_id)`; never income/expense |
 | `finance_budgets` | `id`, `category_id`, `period_start`, `period_end_inclusive`, `limit_idr`, `rollover_enabled`, `rollover_carry_idr`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Positive integer IDR; `period_end_inclusive >= period_start`; triggers enforce expense categories only; `rollover_carry_idr = 0` when rollover disabled |
 | `finance_audit` | `id`, `entity_type`, `entity_id`, `operation`, `previous_values`, `updated_values`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable before/after JSON snapshots for wallet/category/transaction/transfer/budget writes (update/delete triggers abort) |
+| `journal_entries` | `id`, `local_date`, `title`, `reflection_text`, `gratitude_text`, `mood`, `is_private`, `is_deleted`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | Multiple entries per ISO date; requires at least one of title/reflection/gratitude/mood; neutral mood enum |
+| `journal_entry_tags` | `entry_id`, `tag` | TEXT | Composite PK `(entry_id, tag)`, FK to `journal_entries(id) ON DELETE CASCADE`, nonblank tag |
+| `goals` | `id`, `title`, `description`, `status`, `target_date`, `target_units`, `unit_label`, `is_private`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | `status` in (`planned`, `in_progress`, `completed`, `paused`, `abandoned`); positive `target_units` when set |
+| `goal_status_history` | `id`, `goal_id`, `previous_status`, `new_status`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable status transition log (update/delete triggers abort) |
+| `goal_milestones` | `id`, `goal_id`, `title`, `sort_order`, `is_completed`, `completed_at_utc_us`, `created_at_utc_us` | TEXT / INTEGER | Ordered milestones; `completed_at_utc_us` required iff `is_completed = 1` |
+| `goal_habit_links` | `goal_id`, `habit_id`, `created_at_utc_us` | TEXT / INTEGER | Composite PK `(goal_id, habit_id)`, FKs to `goals(id)` and `habits(id)` |
+| `goal_progress_entries` | `id`, `goal_id`, `local_date`, `units`, `source`, `source_ref_id`, `note`, `occurred_at_utc_us` | TEXT / INTEGER | Positive `units`; `source` in (`manual`, `linked_habit`, `linked_focus`, `milestone`); partial `UNIQUE (goal_id, source, source_ref_id)` prevents duplicate linked progress |
+| `focus_presets` | `id`, `name`, `focus_minutes`, `short_break_minutes`, `long_break_minutes`, `sessions_before_long_break`, `created_at_utc_us` | TEXT / INTEGER | Positive durations and cycle count (default 25/5/15/4) |
+| `focus_sessions` | `id`, `preset_id`, `kind`, `local_date`, `planned_duration_seconds`, `state`, `cycle_index`, `started_at_utc_us`, `last_resumed_at_utc_us`, `deadline_utc_us`, `accumulated_elapsed_seconds`, `ended_at_utc_us`, `interruption_reason`, `linked_habit_id`, `linked_goal_id`, `linked_habit_event_id`, `linked_goal_progress_id`, `note` | TEXT / INTEGER | Persisted running deadline & elapsed state for restart recovery; explicit `interrupted` state/reason; partial unique indexes on `linked_habit_event_id` and `linked_goal_progress_id` prevent duplicate linked progress |
+
+Schema v15 adds the nine Growth tables (Journal, Goals and Focus), indexes and immutable `goal_status_history` triggers transactionally when upgrading from versions 1–14 without modifying existing settings, habit or finance data. SQLite remains unencrypted at rest.
 
 Schema v14 adds the six Finance tables, indexes and triggers transactionally when upgrading from versions 1–13 without modifying existing settings or habit data. SQLite remains unencrypted at rest.
 

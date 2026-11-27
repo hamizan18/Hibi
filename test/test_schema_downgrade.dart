@@ -1,7 +1,21 @@
 import 'package:sqlite3/sqlite3.dart';
 
-/// Drops schema version 14 Finance tables for legacy migration fixtures.
+/// Drops schema version 15 Growth (Journal, Goals, Focus) tables for legacy migration fixtures.
+void dropV15Schema(Database db) {
+  db.execute('DROP TABLE IF EXISTS focus_sessions');
+  db.execute('DROP TABLE IF EXISTS focus_presets');
+  db.execute('DROP TABLE IF EXISTS goal_progress_entries');
+  db.execute('DROP TABLE IF EXISTS goal_habit_links');
+  db.execute('DROP TABLE IF EXISTS goal_milestones');
+  db.execute('DROP TABLE IF EXISTS goal_status_history');
+  db.execute('DROP TABLE IF EXISTS goals');
+  db.execute('DROP TABLE IF EXISTS journal_entry_tags');
+  db.execute('DROP TABLE IF EXISTS journal_entries');
+}
+
+/// Drops schema version 14 Finance tables (and v15 Growth tables) for legacy migration fixtures.
 void dropV14Schema(Database db) {
+  dropV15Schema(db);
   db.execute('DROP TABLE IF EXISTS finance_audit');
   db.execute('DROP TABLE IF EXISTS finance_budgets');
   db.execute('DROP TABLE IF EXISTS finance_transfers');

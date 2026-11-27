@@ -34,7 +34,13 @@ void main() {
     expect(find.text('Welcome to Hibi'), findsOneWidget);
     await tester.tap(find.text('Growth'));
     await tester.pumpAndSettle();
-    expect(find.text('Growth is not available yet'), findsOneWidget);
+    expect(find.text('Journal, Goals & Focus'), findsOneWidget);
+    await tester.tap(find.text('More'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Create a habit below. Other features are not available yet.'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
     expect(find.text('Welcome to Hibi'), findsOneWidget);

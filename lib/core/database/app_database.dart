@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -50,10 +50,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createLifecycleStartPauseSchema();
       await _createScoringSchema();
       await _createFinanceSchema();
+      await _createGrowthSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 13 || to != 14) {
+      if (from < 1 || from > 14 || to != 15) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -78,6 +79,7 @@ class AppDatabase extends GeneratedDatabase {
           await _upgradeToV13();
         }
         if (from <= 13) await _createFinanceSchema();
+        if (from <= 14) await _createGrowthSchema();
       });
     },
     beforeOpen: (details) async {
@@ -1104,6 +1106,247 @@ class AppDatabase extends GeneratedDatabase {
         END
       ''');
     }
+  }
+
+  Future<void> _createGrowthSchema() async {
+    // 1. Optional Journal & Mood (multiple entries per local date, private-aware).
+    await customStatement('''
+      CREATE TABLE journal_entries (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        title TEXT,
+        reflection_text TEXT,
+        gratitude_text TEXT,
+        mood TEXT CHECK (
+          mood IS NULL OR mood IN ('very_low', 'low', 'neutral', 'good', 'great')
+        ),
+        is_private INTEGER NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1)),
+        is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer'),
+        CHECK (
+          (title IS NOT NULL AND length(trim(title)) > 0)
+          OR (reflection_text IS NOT NULL AND length(trim(reflection_text)) > 0)
+          OR (gratitude_text IS NOT NULL AND length(trim(gratitude_text)) > 0)
+          OR mood IS NOT NULL
+        )
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX journal_entries_by_date
+      ON journal_entries (local_date, created_at_utc_us, id)
+    ''');
+
+    await customStatement('''
+      CREATE TABLE journal_entry_tags (
+        entry_id TEXT NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        tag TEXT NOT NULL CHECK (length(trim(tag)) > 0),
+        PRIMARY KEY (entry_id, tag)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX journal_entry_tags_by_tag
+      ON journal_entry_tags (tag, entry_id)
+    ''');
+
+    // 2. Goals, Milestones, Linked Habits, Deduplicated Progress & Status History.
+    await customStatement('''
+      CREATE TABLE goals (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        description TEXT,
+        status TEXT NOT NULL CHECK (
+          status IN ('planned', 'in_progress', 'completed', 'paused', 'abandoned')
+        ),
+        target_date TEXT CHECK (
+          target_date IS NULL OR (
+            target_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+            AND substr(target_date, 1, 4) >= '0001'
+            AND date(target_date, '+0 days') IS target_date
+          )
+        ),
+        target_units INTEGER CHECK (
+          target_units IS NULL OR (typeof(target_units) = 'integer' AND target_units > 0)
+        ),
+        unit_label TEXT,
+        is_private INTEGER NOT NULL DEFAULT 0 CHECK (is_private IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer')
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE goal_status_history (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+        previous_status TEXT CHECK (
+          previous_status IS NULL
+          OR previous_status IN ('planned', 'in_progress', 'completed', 'paused', 'abandoned')
+        ),
+        new_status TEXT NOT NULL CHECK (
+          new_status IN ('planned', 'in_progress', 'completed', 'paused', 'abandoned')
+        ),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX goal_status_history_by_goal
+      ON goal_status_history (goal_id, occurred_at_utc_us, id)
+    ''');
+    for (final op in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER goal_status_history_no_${op.toLowerCase()}
+        BEFORE $op ON goal_status_history
+        BEGIN
+          SELECT RAISE(ABORT, 'goal status history is immutable');
+        END
+      ''');
+    }
+
+    await customStatement('''
+      CREATE TABLE goal_milestones (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+        title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        sort_order INTEGER NOT NULL DEFAULT 0 CHECK (typeof(sort_order) = 'integer'),
+        is_completed INTEGER NOT NULL DEFAULT 0 CHECK (is_completed IN (0, 1)),
+        completed_at_utc_us INTEGER CHECK (
+          (is_completed = 0 AND completed_at_utc_us IS NULL)
+          OR (is_completed = 1 AND completed_at_utc_us IS NOT NULL AND typeof(completed_at_utc_us) = 'integer')
+        ),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX goal_milestones_by_goal
+      ON goal_milestones (goal_id, sort_order, id)
+    ''');
+
+    await customStatement('''
+      CREATE TABLE goal_habit_links (
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        PRIMARY KEY (goal_id, habit_id)
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE goal_progress_entries (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE RESTRICT,
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        units INTEGER NOT NULL CHECK (typeof(units) = 'integer' AND units > 0),
+        source TEXT NOT NULL CHECK (
+          source IN ('manual', 'linked_habit', 'linked_focus', 'milestone')
+        ),
+        source_ref_id TEXT CHECK (
+          (source = 'manual' AND (source_ref_id IS NULL OR length(trim(source_ref_id)) > 0))
+          OR (source != 'manual' AND source_ref_id IS NOT NULL AND length(trim(source_ref_id)) > 0)
+        ),
+        note TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE UNIQUE INDEX goal_progress_unique_source_ref
+      ON goal_progress_entries (goal_id, source, source_ref_id)
+      WHERE source_ref_id IS NOT NULL
+    ''');
+    await customStatement('''
+      CREATE INDEX goal_progress_by_goal_date
+      ON goal_progress_entries (goal_id, local_date, occurred_at_utc_us)
+    ''');
+
+    // 3. Restart-Safe Focus / Pomodoro Presets and Sessions.
+    await customStatement('''
+      CREATE TABLE focus_presets (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        focus_minutes INTEGER NOT NULL CHECK (typeof(focus_minutes) = 'integer' AND focus_minutes > 0),
+        short_break_minutes INTEGER NOT NULL CHECK (typeof(short_break_minutes) = 'integer' AND short_break_minutes > 0),
+        long_break_minutes INTEGER NOT NULL CHECK (typeof(long_break_minutes) = 'integer' AND long_break_minutes > 0),
+        sessions_before_long_break INTEGER NOT NULL DEFAULT 4 CHECK (
+          typeof(sessions_before_long_break) = 'integer' AND sessions_before_long_break > 0
+        ),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer')
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE focus_sessions (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        preset_id TEXT REFERENCES focus_presets(id) ON DELETE RESTRICT,
+        kind TEXT NOT NULL CHECK (kind IN ('focus', 'short_break', 'long_break')),
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        planned_duration_seconds INTEGER NOT NULL CHECK (
+          typeof(planned_duration_seconds) = 'integer' AND planned_duration_seconds > 0
+        ),
+        state TEXT NOT NULL CHECK (
+          state IN ('running', 'paused', 'completed', 'interrupted', 'cancelled')
+        ),
+        cycle_index INTEGER NOT NULL DEFAULT 1 CHECK (
+          typeof(cycle_index) = 'integer' AND cycle_index > 0
+        ),
+        started_at_utc_us INTEGER NOT NULL CHECK (typeof(started_at_utc_us) = 'integer'),
+        last_resumed_at_utc_us INTEGER CHECK (
+          (state = 'running' AND last_resumed_at_utc_us IS NOT NULL AND typeof(last_resumed_at_utc_us) = 'integer')
+          OR (state != 'running' AND last_resumed_at_utc_us IS NULL)
+        ),
+        deadline_utc_us INTEGER CHECK (
+          (state = 'running' AND deadline_utc_us IS NOT NULL AND typeof(deadline_utc_us) = 'integer' AND deadline_utc_us >= last_resumed_at_utc_us)
+          OR (state != 'running' AND deadline_utc_us IS NULL)
+        ),
+        accumulated_elapsed_seconds INTEGER NOT NULL DEFAULT 0 CHECK (
+          typeof(accumulated_elapsed_seconds) = 'integer'
+          AND accumulated_elapsed_seconds >= 0
+          AND accumulated_elapsed_seconds <= planned_duration_seconds
+        ),
+        ended_at_utc_us INTEGER CHECK (
+          (state IN ('completed', 'interrupted', 'cancelled') AND ended_at_utc_us IS NOT NULL AND typeof(ended_at_utc_us) = 'integer')
+          OR (state IN ('running', 'paused') AND ended_at_utc_us IS NULL)
+        ),
+        interruption_reason TEXT CHECK (
+          state = 'interrupted' OR interruption_reason IS NULL
+        ),
+        linked_habit_id TEXT REFERENCES habits(id) ON DELETE RESTRICT,
+        linked_goal_id TEXT REFERENCES goals(id) ON DELETE RESTRICT,
+        linked_habit_event_id TEXT,
+        linked_goal_progress_id TEXT,
+        note TEXT
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX focus_sessions_by_date
+      ON focus_sessions (local_date, started_at_utc_us, id)
+    ''');
+    await customStatement('''
+      CREATE INDEX focus_sessions_by_state
+      ON focus_sessions (state, started_at_utc_us)
+    ''');
+    await customStatement('''
+      CREATE UNIQUE INDEX focus_sessions_unique_habit_event
+      ON focus_sessions (linked_habit_event_id)
+      WHERE linked_habit_event_id IS NOT NULL
+    ''');
+    await customStatement('''
+      CREATE UNIQUE INDEX focus_sessions_unique_goal_progress
+      ON focus_sessions (linked_goal_progress_id)
+      WHERE linked_goal_progress_id IS NOT NULL
+    ''');
   }
 
   Future<String?> getSetting(String key) async {

@@ -99,7 +99,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        14,
+        15,
       );
       await CounterTargetStore(migrated)
           .insert('v1', CounterTarget(count: 5, unit: 'pages'));
