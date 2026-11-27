@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -52,10 +52,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createFinanceSchema();
       await _createGrowthSchema();
       await _createGamificationSchema();
+      await _createPrivacyDataSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 15 || to != 16) {
+      if (from < 1 || from > 16 || to != 17) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -82,6 +83,7 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 13) await _createFinanceSchema();
         if (from <= 14) await _createGrowthSchema();
         if (from <= 15) await _createGamificationSchema();
+        if (from <= 16) await _createPrivacyDataSchema();
       });
     },
     beforeOpen: (details) async {
@@ -1454,6 +1456,64 @@ class AppDatabase extends GeneratedDatabase {
         created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
         PRIMARY KEY (habit_id, attribute_id)
       )
+    ''');
+  }
+
+  Future<void> _createPrivacyDataSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_reminders (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        hour INTEGER NOT NULL CHECK (typeof(hour) = 'integer' AND hour BETWEEN 0 AND 23),
+        minute INTEGER NOT NULL CHECK (typeof(minute) = 'integer' AND minute BETWEEN 0 AND 59),
+        is_enabled INTEGER NOT NULL DEFAULT 1 CHECK (is_enabled IN (0, 1)),
+        allow_sensitive_text INTEGER NOT NULL DEFAULT 0 CHECK (allow_sensitive_text IN (0, 1)),
+        custom_message TEXT,
+        last_schedule_mode TEXT NOT NULL DEFAULT 'pending' CHECK (
+          last_schedule_mode IN (
+            'pending',
+            'exact',
+            'inexact',
+            'skipped_inactive',
+            'permission_denied',
+            'disabled'
+          )
+        ),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        updated_at_utc_us INTEGER NOT NULL CHECK (typeof(updated_at_utc_us) = 'integer'),
+        UNIQUE (habit_id, hour, minute)
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX habit_reminders_by_habit
+      ON habit_reminders (habit_id, hour, minute)
+    ''');
+
+    await customStatement('''
+      CREATE TABLE backup_history (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        operation TEXT NOT NULL CHECK (
+          operation IN (
+            'backup',
+            'restore',
+            'pre_restore_snapshot',
+            'export_json',
+            'export_csv',
+            'export_pdf',
+            'privacy_delete'
+          )
+        ),
+        format TEXT NOT NULL CHECK (length(trim(format)) > 0),
+        is_encrypted INTEGER NOT NULL CHECK (is_encrypted IN (0, 1)),
+        included_private INTEGER NOT NULL DEFAULT 0 CHECK (included_private IN (0, 1)),
+        file_name TEXT,
+        summary_note TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX backup_history_by_time
+      ON backup_history (occurred_at_utc_us DESC, id DESC)
     ''');
   }
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0, Milestone 1, Milestone 2, Milestone 3, and Milestone 4 are accepted by the owner. Milestone 5 (Gamification) is implemented and verified on host (formatting, static analysis, 298 passing tests, Android debug APK build) and on a physical Android 16 (API 36) device (`2510DRA23E`: live in-place `v15 -> v16` migration, cold launch, and Growth tab visual inspection with zero logcat errors). Do not start Milestone 6 (Privacy, reminders, data) without explicit Milestone 5 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
+Milestone 0 through Milestone 6 are accepted by the owner. **Milestone 7 (Finalization)** is implemented and verified on host (`dart format`, `flutter analyze`, 313 passing tests covering `T-001`–`T-013`, `integration_test/app_test.dart`, Android debug APK and Android release APK `63.4 MB`), awaiting final owner acceptance. Optional legacy text import (`R-014`) and non-counter backdated correction remain explicitly deferred. See HANDOFF.md and PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

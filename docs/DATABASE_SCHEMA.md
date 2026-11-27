@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 16 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 17 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -111,6 +111,10 @@ Schema version 16 is defined in `lib/core/database/app_database.dart` using expl
 | `gamification_achievement_history` | `id`, `achievement_key`, `rule_version`, `event_type`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable (`UPDATE`/`DELETE` triggers abort) `unlocked` / `invalidated` / `revalidated` audit trail |
 | `gamification_attributes` | `id`, `name`, `description`, `is_archived`, `created_at_utc_us` | TEXT / INTEGER | Unique nonblank custom activity attribute names |
 | `gamification_habit_attributes` | `habit_id`, `attribute_id`, `created_at_utc_us` | TEXT / INTEGER | Composite PK `(habit_id, attribute_id)` linking habits to custom attributes |
+| `habit_reminders` | `id`, `habit_id`, `hour`, `minute`, `is_enabled`, `allow_sensitive_text`, `custom_message`, `last_schedule_mode`, `created_at_utc_us`, `updated_at_utc_us` | TEXT / INTEGER | User-configured local reminder time (`hour` 0–23, `minute` 0–59), `UNIQUE (habit_id, hour, minute)`, `allow_sensitive_text` defaults to `0` (generic text for private habits), tracks `last_schedule_mode` |
+| `backup_history` | `id`, `operation`, `format`, `is_encrypted`, `included_private`, `file_name`, `summary_note`, `occurred_at_utc_us` | TEXT / INTEGER | Local operation log for encrypted backup, atomic restore, pre-restore snapshot, JSON/CSV/PDF export and sanitized privacy deletion (never stores PINs, passphrases or sensitive content) |
+
+Schema v17 adds `habit_reminders` and `backup_history` transactionally when upgrading from versions 1–16 without modifying existing settings, habit, finance, growth or gamification data. SQLite remains unencrypted at rest; App Lock verifiers live in Android Keystore via `flutter_secure_storage`, not SQLite.
 
 Schema v16 adds the five Gamification tables, indexes and immutable ledger/achievement-history triggers transactionally when upgrading from versions 1–15 without modifying existing settings, habit, finance or growth data. SQLite remains unencrypted at rest.
 

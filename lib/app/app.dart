@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/database/app_database.dart';
+import '../core/security/app_lock_gate.dart';
 import '../core/services/app_clock.dart';
+import '../features/data_management/presentation/privacy_reminders_data_screen.dart';
 import '../features/finance/presentation/finance_screen.dart';
 import '../features/growth/presentation/growth_screen.dart';
 import '../features/habits/domain/habit_schedule.dart';
@@ -59,6 +61,8 @@ class HibiApp extends ConsumerWidget {
         debugShowCheckedModeBanner: false,
         theme: createHibiTheme(),
         routerConfig: ref.watch(_routerProvider),
+        builder: (context, child) =>
+            AppLockGate(child: child ?? const SizedBox.shrink()),
       ),
       loading: () => MaterialApp(
         theme: createHibiTheme(),
@@ -171,7 +175,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                           ? 'Integer IDR wallets, transactions, atomic transfers, expense budgets and audited reports.'
                           : widget.index == 3
                           ? 'Optional journal and mood, goals with milestones, restart-safe focus sessions, and opt-in XP rewards.'
-                          : 'Create a habit below. Other features are not available yet.',
+                          : 'Habit Builder, App Lock & Privacy, Local Reminders, Encrypted Backup/Restore and Exports. Optional legacy import is not enabled.',
                     ),
                   ],
                 ),
@@ -214,6 +218,13 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('Create habit'),
+              ),
+            ],
+            if (widget.index == 4) ...[
+              const SizedBox(height: 16),
+              PrivacyRemindersDataView(
+                key: ValueKey(_rosterRevision),
+                asOfDate: LocalDate(_now.year, _now.month, _now.day),
               ),
             ],
           ],

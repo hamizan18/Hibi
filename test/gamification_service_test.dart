@@ -315,7 +315,7 @@ void main() {
       final vRow = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(vRow.read<int>('user_version'), 16);
+      expect(vRow.read<int>('user_version'), 17);
 
       final entries = await JournalService(upgraded, clock).readEntries();
       expect(entries.single.id, 'j_keep');

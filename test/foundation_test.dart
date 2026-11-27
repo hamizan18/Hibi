@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hibi/app/app.dart';
 import 'package:hibi/core/database/app_database.dart';
+import 'package:hibi/core/security/app_lock_service.dart';
+import 'package:hibi/core/security/security_providers.dart';
 import 'package:hibi/core/services/app_clock.dart';
+import 'package:hibi/features/reminders/application/reminder_providers.dart';
+import 'package:hibi/features/reminders/data/reminder_service.dart';
 
 class FakeClock implements AppClock {
   @override
@@ -25,6 +29,12 @@ void main() {
           databaseProvider.overrideWithValue(db),
           appClockProvider.overrideWithValue(FakeClock()),
           databaseInitializationProvider.overrideWith((ref) async {}),
+          secureKeyValueStoreProvider.overrideWithValue(
+            InMemorySecureKeyValueStore(),
+          ),
+          localNotificationGatewayProvider.overrideWithValue(
+            InMemoryNotificationGateway(),
+          ),
         ],
         child: const HibiApp(),
       ),
@@ -37,10 +47,7 @@ void main() {
     expect(find.text('Journal, Goals & Focus'), findsOneWidget);
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Create a habit below. Other features are not available yet.'),
-      findsOneWidget,
-    );
+    expect(find.text('Privacy & App Lock'), findsOneWidget);
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
     expect(find.text('Welcome to Hibi'), findsOneWidget);
@@ -55,6 +62,12 @@ void main() {
           databaseProvider.overrideWithValue(db),
           appClockProvider.overrideWithValue(FakeClock()),
           databaseInitializationProvider.overrideWith((ref) async {}),
+          secureKeyValueStoreProvider.overrideWithValue(
+            InMemorySecureKeyValueStore(),
+          ),
+          localNotificationGatewayProvider.overrideWithValue(
+            InMemoryNotificationGateway(),
+          ),
         ],
         child: const HibiApp(),
       ),

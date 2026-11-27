@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hibi/app/app.dart';
 import 'package:hibi/core/database/app_database.dart';
+import 'package:hibi/core/security/app_lock_service.dart';
+import 'package:hibi/core/security/security_providers.dart';
 import 'package:hibi/core/services/app_clock.dart';
 import 'package:hibi/features/finance/data/finance_service.dart';
 import 'package:hibi/features/finance/domain/finance_models.dart';
@@ -154,6 +156,9 @@ void main() {
           databaseProvider.overrideWithValue(db),
           appClockProvider.overrideWithValue(_TestClock()),
           databaseInitializationProvider.overrideWith((ref) async {}),
+          secureKeyValueStoreProvider.overrideWithValue(
+            InMemorySecureKeyValueStore(),
+          ),
         ],
         child: const HibiApp(),
       ),

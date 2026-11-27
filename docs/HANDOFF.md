@@ -2,17 +2,16 @@
 
 ## Current state
 
-**Milestone 0, Milestone 1, Milestone 2, Milestone 3 and Milestone 4 are accepted by the owner. Milestone 5 — Gamification (`R-009` / `T-009`) is implemented and verified on host (all 298 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v15 -> v16` migration, cold launch, Growth tab visual inspection, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 6.**
+**Milestone 0 through Milestone 6 are accepted by the owner. Milestone 7 — Finalization is implemented and verified on host (`dart format`, `flutter analyze`, all 313 automated tests covering `T-001` through `T-013` + 60-day performance benchmark, `integration_test/app_test.dart`, Android debug APK and Android release APK `63.4 MB`), awaiting explicit final owner acceptance. Do not commit, push, publish or release without explicit owner permission.**
 
 ## Latest work
 
-Implemented Milestone 5 — Gamification end-to-end (ADR-081 through ADR-083):
-- Upgraded `AppDatabase` (`lib/core/database/app_database.dart`) to schema version 16 adding immutable `gamification_xp_ledger`, `gamification_achievements`, immutable `gamification_achievement_history`, `gamification_attributes` and `gamification_habit_attributes`, with transactional v1–v15 → v16 migrations.
-- Added pure domain calculators in `lib/features/gamification/domain/gamification_models.dart` (`GamificationRules`, `LevelCalculator` `100 × L`, `AchievementCatalog`, `GamificationAttributeCalculator`).
-- Added transactional `GamificationService` (`lib/features/gamification/data/gamification_service.dart`), `gamificationServiceProvider` (`lib/features/gamification/application/gamification_providers.dart`), and wired atomic correction reconciliation inside `CounterCorrectionWriter.commit` (`lib/features/habits/data/counter_correction_writer.dart`).
-- Added `GamificationSection` (`lib/features/gamification/presentation/gamification_section.dart`) as the `Rewards` section inside `GrowthView` on `/growth`.
-- Added `test/gamification_domain_test.dart`, `test/gamification_service_test.dart`, `test/gamification_screen_test.dart` and `test/milestone5_acceptance_test.dart` (`T-009`), updated `test/test_schema_downgrade.dart` (`dropV16Schema`), and updated all 12 legacy migration target assertions to 16.
-- Updated `ARCHITECTURE.md`, `BUSINESS_RULES.md`, `DATABASE_SCHEMA.md`, `DECISIONS.md` (ADR-081..ADR-083), `PROJECT_SPEC.md`, `ROADMAP.md`, `PROGRESS.md` and `HANDOFF.md`.
+Completed Milestone 7 — Finalization (ADR-087):
+- Added `integration_test` SDK dev_dependency (`pubspec.yaml`) and `integration_test/app_test.dart` (isolated in-memory DB).
+- Extended `ExportService.exportPdfBytes` (`lib/features/data_management/data/export_service.dart`) with optional `unicodeFont`/`unicodeBoldFont` injection for native Japanese PDF glyphs alongside ASCII-safe Helvetica fallback.
+- Wired optional git-ignored `android/key.properties` release signing in `android/app/build.gradle.kts` and `.gitignore` (preserving debug fallback for local verification and `com.example.hibi` placeholder until owner confirmation).
+- Added `test/milestone7_finalization_test.dart` covering `T-001` (offline/manifest/pubspec boundaries), `T-011` (leap years, Japanese weekdays, year rollover, timezone stability), `T-012` (all 5 tabs at 320px/2.0x text scaling + PDF Unicode safety), `T-013` (`v1 -> v17` disk migration + foreign keys), and a 60-day multi-domain performance benchmark.
+- Synchronized `README.md`, `PROJECT_SPEC.md`, `ROADMAP.md`, `DECISIONS.md` (ADR-087), `PROGRESS.md` and `HANDOFF.md`.
 
 ## Decisions and constraints
 
@@ -61,9 +60,31 @@ Milestone 5 Gamification verification (2026-11-27):
   - Post-upgrade `files/hibi.sqlite` header `user_version` = `16` (`00 00 00 10`) — real live `v15 -> v16` migration succeeded without wiping user data.
   - Visually inspected `Growth` tab showing `Journal`, `Goals`, `Focus` and `Rewards` chips: zero layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`.
 
+Milestone 6 Privacy, Reminders & Data verification (2026-11-27):
+- `dart.bat format --output=none --set-exit-if-changed .`: 193 files formatted (0 changed).
+- `flutter.bat analyze`: `No issues found!` (9.7s).
+- `flutter.bat test -j 2` (with `TEMP`/`TMP` on `D:\` after stopping Gradle daemon due to `C:\` having only `0.04 GB` free): **`01:32 +306: All tests passed!`** (including `app_lock_privacy_test.dart`, `reminder_service_test.dart`, `backup_export_test.dart`, `milestone6_acceptance_test.dart` (`T-010`) and all v1..v16→v17 migration tests).
+- `flutter.bat build apk --debug`: **`√ Built build\app\outputs\flutter-apk\app-debug.apk` (`37.0s`)**.
+- Physical Android 16 (API 36) verification on `2510DRA23E` (`i7xsrs7hvgbqgyln`, `1080x2392`):
+  - `adb -s i7xsrs7hvgbqgyln install -r "build\app\outputs\flutter-apk\app-debug.apk"` succeeded (`Performing Streamed Install` → `Success`).
+  - `adb -s i7xsrs7hvgbqgyln shell am start -W -n com.example.hibi/.MainActivity` cold-launched cleanly (`Status: ok`, `TotalTime: 5392` ms, Impeller Vulkan).
+  - Post-upgrade `files/hibi.sqlite` header `user_version` = `17` (`00 00 00 11`) — real live `v16 -> v17` migration succeeded without wiping user data.
+  - Visually inspected `More` tab (`Privacy & App Lock` with live Android BiometricPrompt detection, `Local Habit Reminders`, `Backup, Restore & Exports`): zero layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`.
+
+Milestone 7 Finalization verification (2026-11-27):
+- `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test -j 2 && flutter.bat build apk --debug && flutter.bat build apk --release"`: exited **0**:
+  - 195 files formatted (0 changed in 1.00s).
+  - `flutter.bat analyze`: `No issues found!` (5.5s, including `integration_test/app_test.dart`).
+  - `flutter.bat test -j 2`: **`01:26 +313: All tests passed!`** (covering `T-001`–`T-013` + 60-day performance benchmark).
+  - `flutter.bat build apk --debug`: `√ Built build\app\outputs\flutter-apk\app-debug.apk` (147.7s).
+  - `flutter.bat build apk --release`: **`√ Built build\app\outputs\flutter-apk\app-release.apk (63.4MB)`** (169.3s).
+- Physical Android 16 release-APK verification on `2510DRA23E` (`i7xsrs7hvgbqgyln`):
+  - `adb -s i7xsrs7hvgbqgyln install -r "build\app\outputs\flutter-apk\app-release.apk"` → `Success`.
+  - Cold launch `am start -W`: `Status: ok`, `LaunchState: COLD`, **`TotalTime: 1773` ms** (AOT Impeller Vulkan), zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`.
+
 ## Next bounded task
 
-Await explicit owner acceptance of Milestone 5 — Gamification. Once the owner explicitly approves Milestone 5, begin Milestone 6 — Privacy, reminders and data (app lock with PIN/biometrics, private disclosure protection, schedule-aware local notifications with inexact fallback, validated atomic backup/restore, and private-by-default JSON/CSV/PDF exports following SECURITY_PRIVACY.md and BUSINESS_RULES.md). Do not commit, push or start Milestone 6 without explicit owner approval.
+Await explicit final owner acceptance of **Milestone 7 — Finalization**, and owner instructions regarding: (1) committing/pushing changes to Git, (2) optional final Android `applicationId` and release keystore (`android/key.properties`) if public distribution is planned, and (3) whether optional legacy text import (`R-014`) should remain deferred. Do not commit, push, publish or release without explicit owner approval.
 
 ## Session handoff — owner-directed pause
 

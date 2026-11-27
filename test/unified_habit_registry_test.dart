@@ -139,7 +139,7 @@ void main() {
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      16,
+      17,
     );
     final summaries = await UnifiedHabitRegistryReader(migrated)
         .readAll(asOfDate: LocalDate(2026, 11, 26));

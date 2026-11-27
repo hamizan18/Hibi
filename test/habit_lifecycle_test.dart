@@ -271,7 +271,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        16,
+        17,
       );
       await HabitLifecycleStore(migrated, FixedClock()).append(
         id: 'a',

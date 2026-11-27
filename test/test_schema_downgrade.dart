@@ -1,7 +1,14 @@
 import 'package:sqlite3/sqlite3.dart';
 
-/// Drops schema version 16 Gamification tables for legacy migration fixtures.
+/// Drops schema version 17 Privacy, Reminders & Backup tables for legacy migration fixtures.
+void dropV17Schema(Database db) {
+  db.execute('DROP TABLE IF EXISTS backup_history');
+  db.execute('DROP TABLE IF EXISTS habit_reminders');
+}
+
+/// Drops schema version 16 Gamification tables (and v17) for legacy migration fixtures.
 void dropV16Schema(Database db) {
+  dropV17Schema(db);
   db.execute('DROP TABLE IF EXISTS gamification_habit_attributes');
   db.execute('DROP TABLE IF EXISTS gamification_attributes');
   db.execute('DROP TABLE IF EXISTS gamification_achievement_history');
