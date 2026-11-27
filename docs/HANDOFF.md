@@ -2,7 +2,7 @@
 
 ## Current state
 
-**Milestone 0, Milestone 1 and Milestone 2 are accepted by the owner. Milestone 3 — Finance is implemented and verified on the host (all 276 automated tests passing + Android debug APK built), awaiting explicit owner acceptance before starting Milestone 4.**
+**Milestone 0, Milestone 1 and Milestone 2 are accepted by the owner. Milestone 3 — Finance is implemented and verified on host (all 276 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v12 -> v14` migration, cold launch, 5-tab navigation, Finance/Growth visual layout, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 4.**
 
 ## Latest work
 
@@ -38,7 +38,12 @@ Dynamic scoring verification: `cmd.exe /c "dart.bat format --output=none --set-e
 
 Milestone 3 Finance verification (2026-11-27):
 - `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && flutter.bat build apk --debug"`: exited 0; 159 files formatted (0 changed), `flutter.bat analyze` found no issues (10.6s), **all 276 tests passed** (00:58, including `finance_domain_test.dart`, `finance_service_test.dart`, `finance_screen_test.dart`, `milestone3_acceptance_test.dart` and all v1..v13→v14 migration tests), and `flutter.bat build apk --debug` built `build\app\outputs\flutter-apk\app-debug.apk` (31.7s; Gradle emitted Java native-access warning).
-- No Android device or emulator was attached; on-device Android visual, migration and restart verification remain unavailable/unverified.
+- Physical Android 16 (API 36) verification on `2510DRA23E` (`i7xsrs7hvgbqgyln`, `1080x2392`):
+  - Pre-upgrade `files/hibi.sqlite` header `user_version` = `12` (`00 00 00 0c`, `344,064` bytes).
+  - `adb -s i7xsrs7hvgbqgyln install -r "build\app\outputs\flutter-apk\app-debug.apk"` succeeded in-place (`Performing Streamed Install` → `Success`).
+  - `adb -s i7xsrs7hvgbqgyln shell am start -W -n com.example.hibi/.MainActivity` cold-launched cleanly (`Status: ok`, `TotalTime: 4510` ms, Impeller Vulkan).
+  - Post-upgrade `files/hibi.sqlite` header `user_version` = `14` (`00 00 00 0e`, `442,368` bytes) — real live `v12 -> v14` migration succeeded without wiping user data.
+  - Navigated across all 5 bottom tabs (`Today`, `History`, `Finance`, `Growth`, `More`) and visually inspected Finance (top + scrolled bottom) and Growth screenshots: zero RenderFlex/layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`. No fake records were created in the owner's live DB; interactive Finance CRUD/restart and timezone-change testing remain for manual verification or isolated `integration_test/` in a future pass.
 
 ## Next bounded task
 

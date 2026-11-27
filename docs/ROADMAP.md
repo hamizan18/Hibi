@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0, Milestone 1, and Milestone 2 are accepted by the owner. Milestone 3 (Finance) is implemented and host-verified with formatting, static analysis, 276 passing tests, and an Android debug APK build; Android device visual and migration verification remain outstanding because no Android device or emulator is attached. Do not start Milestone 4 (Journal, goals, focus) without explicit Milestone 3 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
+Milestone 0, Milestone 1, and Milestone 2 are accepted by the owner. Milestone 3 (Finance) is implemented and verified on host (formatting, static analysis, 276 passing tests, Android debug APK build) and on a physical Android 16 (API 36) device (`2510DRA23E`: live in-place `v12 -> v14` migration, cold launch, 5-tab navigation, and Finance/Growth visual inspection with zero logcat errors). Do not start Milestone 4 (Journal, goals, focus) without explicit Milestone 3 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |
