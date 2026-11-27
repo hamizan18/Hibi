@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0 foundation acceptance is verified; Milestone 1 is in progress. Habit Builder, optional starter templates, current-day Today logging and dated lifecycle controls for configured tracking types are available; other habit-management UI and Android milestone verification remain incomplete. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
+Milestone 0 foundation acceptance is verified. Milestone 1 (Dynamic habits) and Milestone 2 (History and analytics) functional acceptance criteria and debug APK builds are verified on the host: Habit Builder, optional starter templates, current-day Today logging, dated lifecycle controls, strictly future version scheduling and read-only history/audit inspection for all eight tracking types, prior-date counter/checklist recovery, confirmed historical counter target correction with disk-reopen persistence, and the History & Analytics screen (calendar heatmap, filtering, priority-weighted score, habit and checklist-item recording coverage, scheduled-occurrence streaks, period reports and correction recalculation) are implemented and tested; non-counter backdated correction UI is deferred and on-device Android APK installation remains subject to the user's device restriction. Each milestone depends on the accepted foundation and preceding relevant capabilities. See PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

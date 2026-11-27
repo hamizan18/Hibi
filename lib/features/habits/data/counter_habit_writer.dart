@@ -6,8 +6,10 @@ import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
 import '../domain/counter_starter_template.dart';
 import '../domain/counter_target.dart';
+import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import 'habit_lifecycle.dart';
+import 'habit_metadata_store.dart';
 import 'habit_schedule_store.dart';
 import 'counter_target_store.dart';
 
@@ -110,6 +112,7 @@ class CounterHabitWriter {
     required DateTime effectiveDate,
     required CounterTarget target,
     required HabitSchedule schedule,
+    HabitMetadata? metadata,
   }) => _database.transaction(() async {
     final now = _clock.now();
     final start = _dateKey(effectiveDate);
@@ -152,7 +155,10 @@ class CounterHabitWriter {
     final oldId = row.read<String>('id');
     final revision = row.read<int>('revision');
     final scheduleStore = HabitScheduleStore(_database);
+    final metadataStore = HabitMetadataStore(_database);
     final previousSchedule = await scheduleStore.findForVersion(oldId);
+    final previousMetadata = await metadataStore.findForVersion(oldId);
+    final includeMetadataAudit = previousMetadata != null || metadata != null;
     final oldValues = <String, Object?>{
       'version_id': oldId,
       'name': row.read<String>('name'),
@@ -164,6 +170,10 @@ class CounterHabitWriter {
       'schedule': previousSchedule == null
           ? null
           : _scheduleValues(previousSchedule),
+      if (includeMetadataAudit)
+        'metadata': previousMetadata == null
+            ? null
+            : _metadataValues(previousMetadata),
     };
     final timestamp = now.toUtc().microsecondsSinceEpoch;
     await _database.customStatement(
@@ -180,6 +190,9 @@ class CounterHabitWriter {
       target,
     );
     await scheduleStore.insert(versionId, schedule);
+    if (metadata != null) {
+      await metadataStore.insert(versionId, metadata);
+    }
     await _writeAudit(auditId, habitId, 'schedule_version', oldValues, {
       'closed_version': {...oldValues, 'effective_end': start},
       'new_version': {
@@ -191,6 +204,8 @@ class CounterHabitWriter {
         'target_count': target.count,
         'unit': target.unit,
         'schedule': _scheduleValues(schedule),
+        if (includeMetadataAudit)
+          'metadata': metadata == null ? null : _metadataValues(metadata),
       },
     }, timestamp);
   });
@@ -272,6 +287,19 @@ Map<String, Object?> _scheduleValues(HabitSchedule schedule) => {
     'day_of_month': dayOfMonth,
     'monthly_last_day_fallback': lastDayFallback,
   },
+};
+
+Map<String, Object?> _metadataValues(HabitMetadata metadata) => {
+  'description': metadata.description,
+  'symbol': metadata.symbol,
+  'category': metadata.category,
+  'priority': metadata.priority.name,
+  'is_private': metadata.isPrivate,
+  'recovery_enabled': metadata.recoveryEnabled,
+  'include_in_score': metadata.includeInScore,
+  'include_in_streak': metadata.includeInStreak,
+  'include_in_rewards': metadata.includeInRewards,
+  'display_order': metadata.displayOrder,
 };
 
 class _CapturedClock implements AppClock {

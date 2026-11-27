@@ -2,12 +2,15 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../domain/counter_target.dart';
+import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import 'counter_target_store.dart';
 import 'habit_lifecycle.dart';
+import 'habit_metadata_store.dart';
 import 'habit_schedule_store.dart';
 
-/// Read-only snapshot of a habit version and its optional counter target and schedule.
+/// Read-only snapshot of a habit version and its optional counter target,
+/// schedule and metadata.
 class CounterVersionSnapshot {
   const CounterVersionSnapshot({
     required this.versionId,
@@ -19,6 +22,7 @@ class CounterVersionSnapshot {
     required this.createdAtUtc,
     required this.target,
     required this.schedule,
+    this.metadata,
   });
 
   final String versionId;
@@ -30,6 +34,7 @@ class CounterVersionSnapshot {
   final DateTime createdAtUtc;
   final CounterTarget? target;
   final HabitSchedule? schedule;
+  final HabitMetadata? metadata;
 
   bool get isFullyConfigured => target != null && schedule != null;
 }
@@ -114,6 +119,7 @@ class CounterConfigurationReader {
 
     final targetStore = CounterTargetStore(_db);
     final scheduleStore = HabitScheduleStore(_db);
+    final metadataStore = HabitMetadataStore(_db);
     final allVersions = <CounterVersionSnapshot>[];
     final priorVersions = <CounterVersionSnapshot>[];
     final futureVersions = <CounterVersionSnapshot>[];
@@ -137,6 +143,7 @@ class CounterConfigurationReader {
         ),
         target: await targetStore.findForVersion(versionId),
         schedule: await scheduleStore.findForVersion(versionId),
+        metadata: await metadataStore.findForVersion(versionId),
       );
       allVersions.add(snapshot);
       if (start.compareTo(asOfDate) > 0) {

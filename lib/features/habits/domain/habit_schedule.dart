@@ -33,6 +33,16 @@ final class LocalDate implements Comparable<LocalDate> {
     if (monthComparison != 0) return monthComparison;
     return day.compareTo(other.day);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is LocalDate &&
+      year == other.year &&
+      month == other.month &&
+      day == other.day;
+
+  @override
+  int get hashCode => Object.hash(year, month, day);
 }
 
 /// Number of days in a Gregorian calendar month.

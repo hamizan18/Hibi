@@ -22,9 +22,12 @@ import '../data/counter_progress_writer.dart';
 import '../data/counter_recovery_store.dart';
 import '../data/counter_resolution.dart';
 import '../data/counter_today_action_service.dart';
+import '../data/habit_analytics_reader.dart';
 import '../data/habit_lifecycle.dart';
 import '../data/habit_metadata_store.dart';
 import '../data/measurement_time_range_habit_store.dart';
+import '../data/non_counter_version_service.dart';
+import '../data/unified_habit_history_reader.dart';
 import '../data/unified_habit_registry.dart';
 import '../domain/habit_schedule.dart';
 
@@ -178,9 +181,40 @@ final measurementTimeRangeHabitServiceProvider =
       ),
     );
 
+final nonCounterVersionServiceProvider = Provider<NonCounterVersionService>(
+  (ref) => NonCounterVersionService(
+    ref.watch(databaseProvider),
+    ref.watch(appClockProvider),
+  ),
+);
+
 final unifiedHabitRegistryReaderProvider = Provider<UnifiedHabitRegistryReader>(
   (ref) => UnifiedHabitRegistryReader(ref.watch(databaseProvider)),
 );
+
+final unifiedHabitHistoryReaderProvider = Provider<UnifiedHabitHistoryReader>(
+  (ref) => UnifiedHabitHistoryReader(ref.watch(databaseProvider)),
+);
+
+final habitStreakReaderProvider = Provider<HabitStreakReader>(
+  (ref) => HabitStreakReader(ref.watch(databaseProvider)),
+);
+
+final calendarHeatmapReaderProvider = Provider<CalendarHeatmapReader>(
+  (ref) => CalendarHeatmapReader(ref.watch(databaseProvider)),
+);
+
+final analyticsReportReaderProvider = Provider<AnalyticsReportReader>(
+  (ref) => AnalyticsReportReader(ref.watch(databaseProvider)),
+);
+
+final analyticsCorrectionImpactReaderProvider =
+    Provider<AnalyticsCorrectionImpactReader>(
+      (ref) => AnalyticsCorrectionImpactReader(
+        ref.watch(databaseProvider),
+        ref.watch(appClockProvider),
+      ),
+    );
 
 /// Read-only roster evaluation for any requested local date.
 final counterDayRosterProvider = FutureProvider.autoDispose

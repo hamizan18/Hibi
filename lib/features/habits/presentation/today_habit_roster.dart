@@ -8,9 +8,13 @@ import '../domain/habit_schedule.dart';
 import 'boolean_duration_today_cards.dart';
 import 'checklist_avoidance_today_cards.dart';
 import 'checklist_recovery_controls.dart';
+import 'counter_audit_history_sheet.dart';
+import 'counter_correction_controls.dart';
+import 'counter_future_version_controls.dart';
 import 'counter_lifecycle_controls.dart';
 import 'counter_recovery_controls.dart';
 import 'counter_today_card.dart';
+import 'non_counter_version_audit_controls.dart';
 import 'numeric_today_cards.dart';
 
 /// A read-only roster. Opening this widget never creates an occurrence.
@@ -188,6 +192,31 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
                 date: widget.date,
                 showPrivateHistory: _showPrivate,
                 onChanged: _entrySaved,
+              ),
+            if (habit.trackingType == HabitTrackingType.counter) ...[
+              CounterFutureVersionControls(
+                habit: habit,
+                date: widget.date,
+                showPrivateHistory: _showPrivate,
+                onChanged: _lifecycleChanged,
+              ),
+              CounterCorrectionControls(
+                habit: habit,
+                date: widget.date,
+                showPrivateHistory: _showPrivate,
+                onChanged: _lifecycleChanged,
+              ),
+              CounterAuditHistoryControls(
+                habit: habit,
+                date: widget.date,
+                showPrivateHistory: _showPrivate,
+              ),
+            ] else if (habit.trackingType != HabitTrackingType.unconfigured)
+              NonCounterVersionAndAuditControls(
+                habit: habit,
+                date: widget.date,
+                showPrivateHistory: _showPrivate,
+                onChanged: _lifecycleChanged,
               ),
             if (habit.applicability.lifecycleState ==
                     HabitLifecycleState.active &&
