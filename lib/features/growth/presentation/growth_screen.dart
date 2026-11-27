@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_clock.dart';
+import '../../gamification/presentation/gamification_section.dart';
 import '../../habits/application/counter_habit_providers.dart';
 import '../../habits/data/unified_habit_registry.dart';
 import '../../habits/domain/habit_schedule.dart';
@@ -12,7 +13,7 @@ import '../domain/focus_models.dart';
 import '../domain/goal_models.dart';
 import '../domain/journal_models.dart';
 
-enum _GrowthSection { journal, goals, focus }
+enum _GrowthSection { journal, goals, focus, rewards }
 
 class _GrowthSnapshot {
   const _GrowthSnapshot({
@@ -425,21 +426,30 @@ class _GrowthViewState extends ConsumerState<GrowthView> {
                       onSelected: (_) =>
                           setState(() => _section = _GrowthSection.focus),
                     ),
+                    ChoiceChip(
+                      label: const Text('Rewards'),
+                      selected: _section == _GrowthSection.rewards,
+                      onSelected: (_) =>
+                          setState(() => _section = _GrowthSection.rewards),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Show private entries'),
-                  subtitle: const Text(
-                    'Private journals and goals stay hidden until enabled.',
+                if (_section == _GrowthSection.journal ||
+                    _section == _GrowthSection.goals) ...[
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Show private entries'),
+                    subtitle: const Text(
+                      'Private journals and goals stay hidden until enabled.',
+                    ),
+                    value: _includePrivate,
+                    onChanged: (value) {
+                      setState(() => _includePrivate = value);
+                      _reload();
+                    },
                   ),
-                  value: _includePrivate,
-                  onChanged: (value) {
-                    setState(() => _includePrivate = value);
-                    _reload();
-                  },
-                ),
+                ],
               ],
             ),
           ),
@@ -448,6 +458,8 @@ class _GrowthViewState extends ConsumerState<GrowthView> {
         if (_section == _GrowthSection.journal) _buildJournalSection(snapshot),
         if (_section == _GrowthSection.goals) _buildGoalsSection(snapshot),
         if (_section == _GrowthSection.focus) _buildFocusSection(snapshot),
+        if (_section == _GrowthSection.rewards)
+          GamificationSection(habits: snapshot.habits),
       ],
     );
   }

@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 15 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 16 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -106,6 +106,13 @@ Schema version 15 is defined in `lib/core/database/app_database.dart` using expl
 | `goal_progress_entries` | `id`, `goal_id`, `local_date`, `units`, `source`, `source_ref_id`, `note`, `occurred_at_utc_us` | TEXT / INTEGER | Positive `units`; `source` in (`manual`, `linked_habit`, `linked_focus`, `milestone`); partial `UNIQUE (goal_id, source, source_ref_id)` prevents duplicate linked progress |
 | `focus_presets` | `id`, `name`, `focus_minutes`, `short_break_minutes`, `long_break_minutes`, `sessions_before_long_break`, `created_at_utc_us` | TEXT / INTEGER | Positive durations and cycle count (default 25/5/15/4) |
 | `focus_sessions` | `id`, `preset_id`, `kind`, `local_date`, `planned_duration_seconds`, `state`, `cycle_index`, `started_at_utc_us`, `last_resumed_at_utc_us`, `deadline_utc_us`, `accumulated_elapsed_seconds`, `ended_at_utc_us`, `interruption_reason`, `linked_habit_id`, `linked_goal_id`, `linked_habit_event_id`, `linked_goal_progress_id`, `note` | TEXT / INTEGER | Persisted running deadline & elapsed state for restart recovery; explicit `interrupted` state/reason; partial unique indexes on `linked_habit_event_id` and `linked_goal_progress_id` prevent duplicate linked progress |
+| `gamification_xp_ledger` | `id`, `rule_version`, `source_type`, `source_key`, `habit_id`, `local_date`, `entry_kind`, `status_snapshot`, `xp_delta`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable ledger (`UPDATE`/`DELETE` triggers abort); `source_type` restricted to `'habit_occurrence'`; partial `UNIQUE (source_type, source_key, rule_version) WHERE entry_kind = 'award'` enforces one base reward per eligible occurrence |
+| `gamification_achievements` | `achievement_key`, `rule_version`, `unlocked_at_utc_us`, `is_currently_valid`, `invalidated_at_utc_us`, `last_evaluated_at_utc_us`, `status_note` | TEXT / INTEGER | Preserves `unlocked_at_utc_us` permanently even when `is_currently_valid = 0` |
+| `gamification_achievement_history` | `id`, `achievement_key`, `rule_version`, `event_type`, `reason`, `occurred_at_utc_us` | TEXT / INTEGER | Immutable (`UPDATE`/`DELETE` triggers abort) `unlocked` / `invalidated` / `revalidated` audit trail |
+| `gamification_attributes` | `id`, `name`, `description`, `is_archived`, `created_at_utc_us` | TEXT / INTEGER | Unique nonblank custom activity attribute names |
+| `gamification_habit_attributes` | `habit_id`, `attribute_id`, `created_at_utc_us` | TEXT / INTEGER | Composite PK `(habit_id, attribute_id)` linking habits to custom attributes |
+
+Schema v16 adds the five Gamification tables, indexes and immutable ledger/achievement-history triggers transactionally when upgrading from versions 1–15 without modifying existing settings, habit, finance or growth data. SQLite remains unencrypted at rest.
 
 Schema v15 adds the nine Growth tables (Journal, Goals and Focus), indexes and immutable `goal_status_history` triggers transactionally when upgrading from versions 1–14 without modifying existing settings, habit or finance data. SQLite remains unencrypted at rest.
 

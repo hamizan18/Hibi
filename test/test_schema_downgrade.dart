@@ -1,7 +1,17 @@
 import 'package:sqlite3/sqlite3.dart';
 
-/// Drops schema version 15 Growth (Journal, Goals, Focus) tables for legacy migration fixtures.
+/// Drops schema version 16 Gamification tables for legacy migration fixtures.
+void dropV16Schema(Database db) {
+  db.execute('DROP TABLE IF EXISTS gamification_habit_attributes');
+  db.execute('DROP TABLE IF EXISTS gamification_attributes');
+  db.execute('DROP TABLE IF EXISTS gamification_achievement_history');
+  db.execute('DROP TABLE IF EXISTS gamification_achievements');
+  db.execute('DROP TABLE IF EXISTS gamification_xp_ledger');
+}
+
+/// Drops schema version 15 Growth (Journal, Goals, Focus) tables (and v16) for legacy migration fixtures.
 void dropV15Schema(Database db) {
+  dropV16Schema(db);
   db.execute('DROP TABLE IF EXISTS focus_sessions');
   db.execute('DROP TABLE IF EXISTS focus_presets');
   db.execute('DROP TABLE IF EXISTS goal_progress_entries');

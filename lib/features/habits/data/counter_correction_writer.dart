@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../../gamification/data/gamification_service.dart';
 import '../domain/habit_schedule.dart';
 import 'counter_correction_preview.dart';
 
@@ -173,6 +174,18 @@ class CounterCorrectionWriter {
         nowUtcUs,
       ],
     );
+
+    // Atomically reconcile existing XP ledger & achievements when a historical
+    // target correction commits.
+    final hasGamificationState = await _db.customSelect('''
+          SELECT EXISTS(SELECT 1 FROM gamification_xp_ledger)
+              OR EXISTS(SELECT 1 FROM gamification_achievements) AS has_state
+        ''').getSingle();
+    if (hasGamificationState.read<int>('has_state') == 1) {
+      await GamificationService(_db, _clock).reconcileInCurrentTransaction(
+        reason: 'Counter target correction $correctionAuditId',
+      );
+    }
   });
 
   Future<List<CounterCorrectionAuditRecord>> readAuditsForHabit(

@@ -333,7 +333,7 @@ void main() {
         final versionRow = await upgraded
             .customSelect('PRAGMA user_version')
             .getSingle();
-        expect(versionRow.read<int>('user_version'), 15);
+        expect(versionRow.read<int>('user_version'), 16);
         expect(await upgraded.getSetting('theme'), 'dark');
 
         final wallets = await FinanceService(upgraded, clock).readWallets();

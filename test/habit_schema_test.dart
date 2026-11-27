@@ -39,7 +39,7 @@ void main() {
       expect(
         (await reopened.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        15,
+        16,
       );
       expect(
         (await reopened

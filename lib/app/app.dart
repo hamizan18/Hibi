@@ -170,7 +170,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                           : widget.index == 2
                           ? 'Integer IDR wallets, transactions, atomic transfers, expense budgets and audited reports.'
                           : widget.index == 3
-                          ? 'Optional journal and mood, goals with milestones, and restart-safe focus sessions.'
+                          ? 'Optional journal and mood, goals with milestones, restart-safe focus sessions, and opt-in XP rewards.'
                           : 'Create a habit below. Other features are not available yet.',
                     ),
                   ],

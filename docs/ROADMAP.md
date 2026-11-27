@@ -1,6 +1,6 @@
 # Roadmap
 
-Milestone 0, Milestone 1, Milestone 2, and Milestone 3 are accepted by the owner. Milestone 4 (Journal, goals, focus) is implemented and verified on host (formatting, static analysis, 288 passing tests, Android debug APK build) and on a physical Android 16 (API 36) device (`2510DRA23E`: live in-place `v14 -> v15` migration, cold launch, and Growth tab visual inspection with zero logcat errors). Do not start Milestone 5 (Gamification) without explicit Milestone 4 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
+Milestone 0, Milestone 1, Milestone 2, Milestone 3, and Milestone 4 are accepted by the owner. Milestone 5 (Gamification) is implemented and verified on host (formatting, static analysis, 298 passing tests, Android debug APK build) and on a physical Android 16 (API 36) device (`2510DRA23E`: live in-place `v15 -> v16` migration, cold launch, and Growth tab visual inspection with zero logcat errors). Do not start Milestone 6 (Privacy, reminders, data) without explicit Milestone 5 acceptance. Non-counter backdated correction is not implemented. See HANDOFF.md and PROGRESS.md for exact results and limitations.
 
 | Milestone | Scope | Acceptance summary |
 | --- | --- | --- |

@@ -238,7 +238,7 @@ void main() {
       expect(
         (await migrated.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        15,
+        16,
       );
       expect(
         (await CounterResolutionReader(migrated).find('o'))!.state,

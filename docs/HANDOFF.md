@@ -2,17 +2,17 @@
 
 ## Current state
 
-**Milestone 0, Milestone 1, Milestone 2 and Milestone 3 are accepted by the owner. Milestone 4 — Journal, goals and focus (`R-008` / `T-008`) is implemented and verified on host (all 288 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v14 -> v15` migration, cold launch, Growth tab visual inspection, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 5.**
+**Milestone 0, Milestone 1, Milestone 2, Milestone 3 and Milestone 4 are accepted by the owner. Milestone 5 — Gamification (`R-009` / `T-009`) is implemented and verified on host (all 298 automated tests passing + Android debug APK built) and on the owner's physical Android 16 (API 36) phone (`2510DRA23E` — live in-place `v15 -> v16` migration, cold launch, Growth tab visual inspection, zero logcat errors), awaiting explicit owner acceptance before starting Milestone 6.**
 
 ## Latest work
 
-Implemented Milestone 4 — Journal, goals and focus end-to-end (ADR-077 through ADR-080):
-- Upgraded `AppDatabase` (`lib/core/database/app_database.dart`) to schema version 15 adding `journal_entries`, `journal_entry_tags`, `goals`, immutable `goal_status_history`, `goal_milestones`, `goal_habit_links`, `goal_progress_entries` (partial unique index on `(goal_id, source, source_ref_id)`), `focus_presets` and `focus_sessions` (persisted running deadline/elapsed state, explicit `interrupted` state/reason, partial unique indexes on linked habit/goal progress), with transactional v1–v14 → v15 migrations.
-- Added pure domain models and calculators in `lib/features/growth/domain/journal_models.dart`, `goal_models.dart` and `focus_models.dart`.
-- Added transactional `JournalService`, `GoalService`, `FocusService` (`lib/features/growth/data/`) and Riverpod providers (`lib/features/growth/application/growth_providers.dart`).
-- Added `GrowthView` (`lib/features/growth/presentation/growth_screen.dart`) and activated `/growth` (tab index 3) in `lib/app/app.dart` while keeping unfinished Milestone 5–6 features on `More` clearly marked unavailable.
-- Added `test/growth_domain_test.dart`, `test/growth_service_test.dart`, `test/growth_screen_test.dart` and `test/milestone4_acceptance_test.dart` (`T-008`), updated `test/test_schema_downgrade.dart` (`dropV15Schema`), updated all legacy migration target assertions to 15, and updated `test/foundation_test.dart`.
-- Updated `ARCHITECTURE.md`, `BUSINESS_RULES.md`, `DATABASE_SCHEMA.md`, `DECISIONS.md` (ADR-077..ADR-080), `PROJECT_SPEC.md`, `ROADMAP.md`, `PROGRESS.md` and `HANDOFF.md`.
+Implemented Milestone 5 — Gamification end-to-end (ADR-081 through ADR-083):
+- Upgraded `AppDatabase` (`lib/core/database/app_database.dart`) to schema version 16 adding immutable `gamification_xp_ledger`, `gamification_achievements`, immutable `gamification_achievement_history`, `gamification_attributes` and `gamification_habit_attributes`, with transactional v1–v15 → v16 migrations.
+- Added pure domain calculators in `lib/features/gamification/domain/gamification_models.dart` (`GamificationRules`, `LevelCalculator` `100 × L`, `AchievementCatalog`, `GamificationAttributeCalculator`).
+- Added transactional `GamificationService` (`lib/features/gamification/data/gamification_service.dart`), `gamificationServiceProvider` (`lib/features/gamification/application/gamification_providers.dart`), and wired atomic correction reconciliation inside `CounterCorrectionWriter.commit` (`lib/features/habits/data/counter_correction_writer.dart`).
+- Added `GamificationSection` (`lib/features/gamification/presentation/gamification_section.dart`) as the `Rewards` section inside `GrowthView` on `/growth`.
+- Added `test/gamification_domain_test.dart`, `test/gamification_service_test.dart`, `test/gamification_screen_test.dart` and `test/milestone5_acceptance_test.dart` (`T-009`), updated `test/test_schema_downgrade.dart` (`dropV16Schema`), and updated all 12 legacy migration target assertions to 16.
+- Updated `ARCHITECTURE.md`, `BUSINESS_RULES.md`, `DATABASE_SCHEMA.md`, `DECISIONS.md` (ADR-081..ADR-083), `PROJECT_SPEC.md`, `ROADMAP.md`, `PROGRESS.md` and `HANDOFF.md`.
 
 ## Decisions and constraints
 
@@ -53,9 +53,17 @@ Milestone 4 Growth verification (2026-11-27):
   - Post-upgrade `files/hibi.sqlite` header `user_version` = `15` (`00 00 00 0f`) — real live `v14 -> v15` migration succeeded without wiping user data.
   - Visually inspected `Growth` tab (`Journal`, `Goals`, `Focus` sections): zero layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`. No fake records were created in the owner's live DB.
 
+Milestone 5 Gamification verification (2026-11-27):
+- `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && flutter.bat build apk --debug"`: exited 0; 179 files formatted (0 changed), `flutter.bat analyze` found no issues (9.3s), **all 298 tests passed** (01:06, including `gamification_domain_test.dart`, `gamification_service_test.dart`, `gamification_screen_test.dart`, `milestone5_acceptance_test.dart` and all v1..v15→v16 migration tests), and `flutter.bat build apk --debug` built `build\app\outputs\flutter-apk\app-debug.apk` (33.3s; Gradle emitted Java native-access warning).
+- Physical Android 16 (API 36) verification on `2510DRA23E` (`i7xsrs7hvgbqgyln`, `1080x2392`):
+  - `adb -s i7xsrs7hvgbqgyln install -r "build\app\outputs\flutter-apk\app-debug.apk"` succeeded in-place (`Performing Streamed Install` → `Success`).
+  - `adb -s i7xsrs7hvgbqgyln shell am start -W -n com.example.hibi/.MainActivity` cold-launched cleanly (`Status: ok`, `TotalTime: 4803` ms, Impeller Vulkan).
+  - Post-upgrade `files/hibi.sqlite` header `user_version` = `16` (`00 00 00 10`) — real live `v15 -> v16` migration succeeded without wiping user data.
+  - Visually inspected `Growth` tab showing `Journal`, `Goals`, `Focus` and `Rewards` chips: zero layout issues, zero `flutter`/`AndroidRuntime`/`System.err` errors in `logcat`.
+
 ## Next bounded task
 
-Await explicit owner acceptance of Milestone 4 — Journal, goals and focus. Once the owner explicitly approves Milestone 4, begin Milestone 5 — Gamification (versioned XP ledger, level formula `100 × L`, deterministic achievements with preserved unlock history, custom non-moralizing attributes and privacy opt-out following BUSINESS_RULES.md). Do not commit, push or start Milestone 5 without explicit owner approval.
+Await explicit owner acceptance of Milestone 5 — Gamification. Once the owner explicitly approves Milestone 5, begin Milestone 6 — Privacy, reminders and data (app lock with PIN/biometrics, private disclosure protection, schedule-aware local notifications with inexact fallback, validated atomic backup/restore, and private-by-default JSON/CSV/PDF exports following SECURITY_PRIVACY.md and BUSINESS_RULES.md). Do not commit, push or start Milestone 6 without explicit owner approval.
 
 ## Session handoff — owner-directed pause
 

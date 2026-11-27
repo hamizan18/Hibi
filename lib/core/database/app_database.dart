@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -51,10 +51,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createScoringSchema();
       await _createFinanceSchema();
       await _createGrowthSchema();
+      await _createGamificationSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 14 || to != 15) {
+      if (from < 1 || from > 15 || to != 16) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -80,6 +81,7 @@ class AppDatabase extends GeneratedDatabase {
         }
         if (from <= 13) await _createFinanceSchema();
         if (from <= 14) await _createGrowthSchema();
+        if (from <= 15) await _createGamificationSchema();
       });
     },
     beforeOpen: (details) async {
@@ -1346,6 +1348,112 @@ class AppDatabase extends GeneratedDatabase {
       CREATE UNIQUE INDEX focus_sessions_unique_goal_progress
       ON focus_sessions (linked_goal_progress_id)
       WHERE linked_goal_progress_id IS NOT NULL
+    ''');
+  }
+
+  Future<void> _createGamificationSchema() async {
+    // 1. Versioned, immutable, idempotent XP ledger (habit occurrences only;
+    //    never finance spending/income or repeated edits).
+    await customStatement('''
+      CREATE TABLE gamification_xp_ledger (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        rule_version INTEGER NOT NULL CHECK (typeof(rule_version) = 'integer' AND rule_version > 0),
+        source_type TEXT NOT NULL CHECK (source_type IN ('habit_occurrence')),
+        source_key TEXT NOT NULL CHECK (length(trim(source_key)) > 0),
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        local_date TEXT NOT NULL CHECK (
+          local_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+          AND substr(local_date, 1, 4) >= '0001'
+          AND date(local_date, '+0 days') IS local_date
+        ),
+        entry_kind TEXT NOT NULL CHECK (entry_kind IN ('award', 'reconciliation')),
+        status_snapshot TEXT NOT NULL CHECK (status_snapshot IN ('completed', 'recovered', 'revoked')),
+        xp_delta INTEGER NOT NULL CHECK (typeof(xp_delta) = 'integer' AND xp_delta != 0),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE UNIQUE INDEX gamification_xp_unique_award
+      ON gamification_xp_ledger (source_type, source_key, rule_version)
+      WHERE entry_kind = 'award'
+    ''');
+    await customStatement('''
+      CREATE INDEX gamification_xp_by_source
+      ON gamification_xp_ledger (source_type, source_key, occurred_at_utc_us, id)
+    ''');
+    await customStatement('''
+      CREATE INDEX gamification_xp_by_habit_date
+      ON gamification_xp_ledger (habit_id, local_date, occurred_at_utc_us)
+    ''');
+    for (final op in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER gamification_xp_ledger_no_${op.toLowerCase()}
+        BEFORE $op ON gamification_xp_ledger
+        BEGIN
+          SELECT RAISE(ABORT, 'gamification xp ledger entries are immutable');
+        END
+      ''');
+    }
+
+    // 2. Deterministic achievements preserving unlock history even if later invalidated.
+    await customStatement('''
+      CREATE TABLE gamification_achievements (
+        achievement_key TEXT NOT NULL PRIMARY KEY CHECK (length(trim(achievement_key)) > 0),
+        rule_version INTEGER NOT NULL CHECK (typeof(rule_version) = 'integer' AND rule_version > 0),
+        unlocked_at_utc_us INTEGER NOT NULL CHECK (typeof(unlocked_at_utc_us) = 'integer'),
+        is_currently_valid INTEGER NOT NULL CHECK (is_currently_valid IN (0, 1)),
+        invalidated_at_utc_us INTEGER CHECK (
+          (is_currently_valid = 1 AND invalidated_at_utc_us IS NULL)
+          OR (is_currently_valid = 0 AND invalidated_at_utc_us IS NOT NULL AND typeof(invalidated_at_utc_us) = 'integer')
+        ),
+        last_evaluated_at_utc_us INTEGER NOT NULL CHECK (typeof(last_evaluated_at_utc_us) = 'integer'),
+        status_note TEXT
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE gamification_achievement_history (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        achievement_key TEXT NOT NULL REFERENCES gamification_achievements(achievement_key) ON DELETE RESTRICT,
+        rule_version INTEGER NOT NULL CHECK (typeof(rule_version) = 'integer' AND rule_version > 0),
+        event_type TEXT NOT NULL CHECK (event_type IN ('unlocked', 'invalidated', 'revalidated')),
+        reason TEXT,
+        occurred_at_utc_us INTEGER NOT NULL CHECK (typeof(occurred_at_utc_us) = 'integer')
+      )
+    ''');
+    await customStatement('''
+      CREATE INDEX gamification_achievement_history_by_key
+      ON gamification_achievement_history (achievement_key, occurred_at_utc_us, id)
+    ''');
+    for (final op in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER gamification_achievement_history_no_${op.toLowerCase()}
+        BEFORE $op ON gamification_achievement_history
+        BEGIN
+          SELECT RAISE(ABORT, 'gamification achievement history is immutable');
+        END
+      ''');
+    }
+
+    // 3. Custom activity attributes (reflect activity, not competence or moral worth).
+    await customStatement('''
+      CREATE TABLE gamification_attributes (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        name TEXT NOT NULL UNIQUE CHECK (length(trim(name)) > 0),
+        description TEXT,
+        is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer')
+      )
+    ''');
+
+    await customStatement('''
+      CREATE TABLE gamification_habit_attributes (
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE RESTRICT,
+        attribute_id TEXT NOT NULL REFERENCES gamification_attributes(id) ON DELETE RESTRICT,
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        PRIMARY KEY (habit_id, attribute_id)
+      )
     ''');
   }
 
