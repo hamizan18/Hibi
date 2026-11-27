@@ -131,6 +131,9 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
             ),
             if (applicability == HabitApplicability.unknown)
               const Text('Status unknown: configuration is incomplete.')
+            else if (habit.applicability.reason ==
+                HabitApplicabilityReason.beforeStart)
+              const Text('Not started yet. You can pause from the start date.')
             else if (applicability == HabitApplicability.notApplicable)
               const Text('Not scheduled or not active today.')
             else
@@ -171,7 +174,7 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
                   'Status unknown: tracking type is not configured.',
                 ),
               },
-            if (habit.trackingType == HabitTrackingType.counter)
+            if (habit.trackingType != HabitTrackingType.unconfigured)
               CounterLifecycleControls(
                 habit: habit,
                 date: widget.date,

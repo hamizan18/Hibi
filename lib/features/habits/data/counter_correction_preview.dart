@@ -190,10 +190,12 @@ class CounterCorrectionPreviewer {
     final lifecycleRows = await _db
         .customSelect(
           '''
-      SELECT id, effective_date, previous_state, state, reason, created_at_utc_us
-      FROM habit_lifecycle_events
-      WHERE habit_id = ?
-      ORDER BY effective_date ASC, id ASC
+      SELECT e.id, e.effective_date, e.previous_state, e.state, e.reason, e.created_at_utc_us,
+             p.id AS pause_id, p.reason AS pause_reason, p.created_at_utc_us AS pause_created_at_utc_us
+      FROM habit_lifecycle_events e
+      LEFT JOIN habit_lifecycle_start_pauses p ON p.initial_event_id = e.id
+      WHERE e.habit_id = ?
+      ORDER BY e.effective_date ASC, e.id ASC
       ''',
           variables: [Variable<String>(proposal.habitId)],
         )
@@ -377,6 +379,11 @@ class CounterCorrectionPreviewer {
             'state': l.read<String>('state'),
             'reason': l.readNullable<String>('reason'),
             'created_at_utc_us': l.read<int>('created_at_utc_us'),
+            'pause_id': l.readNullable<String>('pause_id'),
+            'pause_reason': l.readNullable<String>('pause_reason'),
+            'pause_created_at_utc_us': l.readNullable<int>(
+              'pause_created_at_utc_us',
+            ),
           },
       ],
       'occurrences': occurrenceSnapshotList,

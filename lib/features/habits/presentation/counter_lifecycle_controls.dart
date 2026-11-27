@@ -121,6 +121,82 @@ class _CounterLifecycleControlsState
           state == HabitLifecycleState.deleted,
   };
 
+  bool _canPauseFromStart(List<HabitLifecycleEvent>? history) =>
+      !_loading &&
+      history != null &&
+      history.length == 1 &&
+      history.first.state == HabitLifecycleState.active &&
+      history.first.effectiveDate.compareTo(_today) >= 0 &&
+      widget.date.compareTo(_today) == 0;
+
+  Future<void> _pauseFromStart() async {
+    final history = _history;
+    if (_busy || !_canPauseFromStart(history)) return;
+    final initial = history!.first;
+    final habitId = widget.habit.habitId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Pause from start?'),
+        content: Text(
+          'Pause this habit from its initial start date, ${_format(initial.effectiveDate)}? Its existing history is preserved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pause from start'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted ||
+        confirmed != true ||
+        _busy ||
+        widget.habit.habitId != habitId ||
+        !_canPauseFromStart(_history) ||
+        _history!.first.id != initial.id) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final id = List.generate(
+      16,
+      (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+    try {
+      await ref
+          .read(counterLifecycleActionServiceProvider)
+          .pauseFutureStart(
+            eventId: id,
+            habitId: habitId,
+            expectedInitialEventId: initial.id,
+          );
+      if (!mounted) return;
+      widget.onChanged();
+      if (mounted && widget.habit.habitId == habitId) await _load();
+    } catch (_) {
+      if (!mounted || widget.habit.habitId != habitId) return;
+      await _load();
+      if (mounted && widget.habit.habitId == habitId) {
+        setState(() {
+          _error = 'Lifecycle change could not be saved. The state or date may have changed; review and retry.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _act(_Action action) async {
     if (_busy ||
         _history == null ||
@@ -279,6 +355,11 @@ class _CounterLifecycleControlsState
           if (latest != null && !dateValid)
             const Text(
               'Choose today or a future date later than the latest transition; same-day transitions are not allowed.',
+            ),
+          if (_canPauseFromStart(history))
+            OutlinedButton(
+              onPressed: _busy ? null : _pauseFromStart,
+              child: const Text('Pause from start'),
             ),
           Wrap(
             spacing: 8,

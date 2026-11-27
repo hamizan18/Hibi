@@ -1,8 +1,8 @@
 import 'package:sqlite3/sqlite3.dart';
 
-/// Drops the tables added in schema version 11 so legacy migration tests can
-/// downgrade an initialized database file to versions 2 through 10.
+/// Drops schema versions 11 and 12 for legacy migration fixtures.
 void dropV11Tables(Database db) {
+  db.execute('DROP TABLE IF EXISTS habit_lifecycle_start_pauses');
   db.execute('DROP TABLE IF EXISTS habit_typed_logs');
   db.execute('DROP TABLE IF EXISTS habit_duration_events');
   db.execute('DROP TABLE IF EXISTS habit_typed_occurrences');

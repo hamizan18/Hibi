@@ -6,7 +6,7 @@ Hibi (日々), “Small steps, every day.” / “小さな一歩、毎日。”
 
 Milestone 0 foundation acceptance is verified; Milestone 1 remains in progress. The habit engine supports counter, checklist, avoidance, boolean, duration, measurement, time-of-day and range tracking, dated configuration, schedules, optional templates and internal counter correction. The roadmap describes future history and analytics, finance, journal and mood, goals and focus, gamification, privacy, reminders, backups and exports. Hide or clearly label unfinished functionality. Starter templates are optional and editable, never automatically populated user records. No real history, financial records, incidents or religious activity may be fabricated.
 
-The Habit Builder is available from Today and More. Today supports current-day logging for all eight tracking types, dated lifecycle controls for counter habits and prior-date recovery for eligible counter and checklist records. Other lifecycle controls and historical correction UI remain unavailable.
+The Habit Builder is available from Today and More. Today supports current-day logging and dated lifecycle controls for all eight configured tracking types, and prior-date recovery for eligible counter and checklist records. Future-start habits show their first configuration for lifecycle management without making them applicable today. An eligible habit can be paused from its initial start date without overwriting the original event; ordinary transitions remain append-only. Historical correction UI remains unavailable.
 
 ## Boundaries
 

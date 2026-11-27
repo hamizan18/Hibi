@@ -39,8 +39,9 @@ class UnifiedHabitSummary {
   final HabitApplicabilityDetail applicability;
 }
 
-/// Read-only registry inspecting all stored habits across every tracking type
-/// on a local date in one read transaction without writing records.
+/// Read-only registry for a local date. Before the first version starts, its
+/// configuration is shown for management; applicability still describes the
+/// requested date. Version gaps do not fall forward to a future version.
 class UnifiedHabitRegistryReader {
   const UnifiedHabitRegistryReader(this._db);
 
@@ -61,21 +62,33 @@ class UnifiedHabitRegistryReader {
 
         for (final habit in habits) {
           final habitId = habit.read<String>('id');
-          final versionRow = await _db
-              .customSelect(
-                '''
+          final applicability = await applicabilityReader.describe(
+            habitId,
+            asOfDate,
+          );
+          final versionRow =
+              applicability.reason == HabitApplicabilityReason.beforeStart
+              ? await _db
+                    .customSelect(
+                      'SELECT id, name FROM habit_versions WHERE habit_id = ? ORDER BY effective_start ASC LIMIT 1',
+                      variables: [Variable<String>(habitId)],
+                    )
+                    .getSingleOrNull()
+              : await _db
+                    .customSelect(
+                      '''
             SELECT id, name
             FROM habit_versions
             WHERE habit_id = ? AND effective_start <= ?
               AND (effective_end IS NULL OR ? < effective_end)
             ''',
-                variables: [
-                  Variable<String>(habitId),
-                  Variable<String>(key),
-                  Variable<String>(key),
-                ],
-              )
-              .getSingleOrNull();
+                      variables: [
+                        Variable<String>(habitId),
+                        Variable<String>(key),
+                        Variable<String>(key),
+                      ],
+                    )
+                    .getSingleOrNull();
           final versionId = versionRow?.read<String>('id');
           final trackingType = versionId == null
               ? HabitTrackingType.unconfigured
@@ -86,10 +99,6 @@ class UnifiedHabitRegistryReader {
           final schedule = versionId == null
               ? null
               : await scheduleStore.findForVersion(versionId);
-          final applicability = await applicabilityReader.describe(
-            habitId,
-            asOfDate,
-          );
           summaries.add(
             UnifiedHabitSummary(
               habitId: habitId,

@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 11 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 12 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -82,6 +82,10 @@ Schema version 11 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_lifecycle_events` | `state` | TEXT | NOT NULL: `scheduled`, `active`, `paused`, `archived`, or `deleted` |
 | `habit_lifecycle_events` | `reason` | TEXT | NULL or local user-provided reason |
 | `habit_lifecycle_events` | `created_at_utc_us` | INTEGER | NOT NULL, integer UTC Unix microseconds |
+| `habit_lifecycle_start_pauses` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
+| `habit_lifecycle_start_pauses` | `initial_event_id` | TEXT | NOT NULL, UNIQUE, foreign key to `habit_lifecycle_events(id)`, ON DELETE RESTRICT |
+| `habit_lifecycle_start_pauses` | `created_at_utc_us` | INTEGER | NOT NULL; UTC Unix microseconds |
+| `habit_lifecycle_start_pauses` | `reason` | TEXT | NULL or user-provided reason |
 
 New checklist, avoidance, boolean, duration, measurement, time-of-day and range creations append a `create` entry in the same transaction as their configuration. Its JSON `updated_values` contains the persisted `version`, `schedule`, optional `metadata`, `lifecycle`, `tracking_type`, optional `target` and ordered checklist `items`. The timestamp is the version's creation instant. Existing records receive no invented audit entries; no schema migration is needed. Snapshots may contain private data and are not encrypted.
 
@@ -93,7 +97,9 @@ Occurrence insertion requires a matching habit, applicable version interval, and
 
 `habit_schedules` stores one typed recurrence per habit version. In `weekday_mask`, bit 0 is Monday and bit 6 is Sunday; at least one weekday must be selected. The recurrence anchor may precede the version's effective interval; consumers must combine both intervals. Existing versions without a schedule remain unconfigured and migration does not guess defaults. Triggers reject inserting, changing or deleting a schedule if its version has occurrences; these triggers do not constitute a correction/audit workflow and future privacy deletion needs an explicit design.
 
-`HabitLifecycleStore` records effective-dated transitions with previous/new state, optional reason and UTC creation time, using a transaction and an injected clock. Its internal append path validates transition order and disallows backdating or two events on the same date. Database triggers reject event updates/deletes and insertion that could reinterpret existing later occurrences; direct SQL can still bypass the store's transition validation. Existing habits receive no inferred events. `HabitApplicabilityReader` combines the latest applicable lifecycle event, effective version and stored schedule; it returns `unknown` for missing necessary data, rather than guessing. See BUSINESS_RULES.md for boundaries.
+`HabitLifecycleStore` records effective-dated transitions with previous/new state, optional reason and UTC creation time, using a transaction and an injected clock. Its internal append path validates transition order and disallows backdating or two events on the same date. The store rejects transitions affecting existing checklist, avoidance or typed occurrences on or after the effective date; the database trigger protects counter occurrences. The database does not independently enforce the non-counter check, and direct SQL can bypass the store's transition validation. Database triggers reject event updates/deletes. Existing habits receive no inferred events. `HabitApplicabilityReader` combines the latest applicable lifecycle event, effective version and stored schedule; it returns `unknown` for missing necessary data, rather than guessing. See BUSINESS_RULES.md for boundaries.
+
+Schema version 12 adds immutable start-pause records. Each references the original initial lifecycle event, which is retained unchanged; application readers interpret the pause as a second event effective at the initial start date. The transaction verifies the initial event and first version, local date and absence of occurrences. Direct SQL can bypass application validation. Earlier schemas migrate without adding synthetic pauses.
 
 Schema version 8 adds `habit_counter_event_audit`; migration from versions 1–7 preserves existing events and does not invent audit records for them. The internal counter writer inserts each event and its creation snapshot in one transaction. Its ordinary API only appends; direct SQL is not protected against update/delete of event or audit rows and can bypass the writer. The event ID is the audit primary key, identifying one creation snapshot per event. The snapshot and source event are unencrypted.
 

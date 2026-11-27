@@ -118,21 +118,9 @@ class CounterRecoveryWriter {
       );
     }
 
-    final latestLifecycle = await _db
-        .customSelect(
-          '''
-      SELECT state FROM habit_lifecycle_events
-      WHERE habit_id = ? AND effective_date <= ?
-      ORDER BY effective_date DESC LIMIT 1
-      ''',
-          variables: [Variable<String>(habitId), Variable<String>(todayKey)],
-        )
-        .getSingleOrNull();
-    if (latestLifecycle == null ||
-        HabitLifecycleState.values.byName(
-              latestLifecycle.read<String>('state'),
-            ) !=
-            HabitLifecycleState.active) {
+    final latestLifecycle = await HabitLifecycleReader(_db)
+        .findEffectiveOn(habitId, today);
+    if (latestLifecycle?.state != HabitLifecycleState.active) {
       throw StateError('Habit must be active on the recovery date');
     }
 

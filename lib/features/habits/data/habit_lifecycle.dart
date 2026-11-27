@@ -67,12 +67,22 @@ class HabitLifecycleReader {
     final row = await _db
         .customSelect(
           '''
-      SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us
-      FROM habit_lifecycle_events
-      WHERE habit_id = ? AND effective_date <= ?
-      ORDER BY effective_date DESC LIMIT 1
-    ''',
-          variables: [Variable<String>(habitId), Variable<String>(key)],
+      SELECT * FROM (
+        SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us, 0 AS ordering
+        FROM habit_lifecycle_events WHERE habit_id = ? AND effective_date <= ?
+        UNION ALL
+        SELECT p.id, e.habit_id, e.effective_date, 'active', 'paused', p.reason, p.created_at_utc_us, 1
+        FROM habit_lifecycle_start_pauses p
+        JOIN habit_lifecycle_events e ON e.id = p.initial_event_id
+        WHERE e.habit_id = ? AND e.effective_date <= ?
+      ) ORDER BY effective_date DESC, ordering DESC LIMIT 1
+      ''',
+          variables: [
+            Variable<String>(habitId),
+            Variable<String>(key),
+            Variable<String>(habitId),
+            Variable<String>(key),
+          ],
         )
         .getSingleOrNull();
     return row == null ? null : _mapEvent(row);
@@ -84,12 +94,16 @@ class HabitLifecycleReader {
         final rows = await _db
             .customSelect(
               '''
-          SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us
-          FROM habit_lifecycle_events
-          WHERE habit_id = ?
-          ORDER BY effective_date ASC, created_at_utc_us ASC, id ASC
+          SELECT id, habit_id, effective_date, previous_state, state, reason, created_at_utc_us, 0 AS ordering
+          FROM habit_lifecycle_events WHERE habit_id = ?
+          UNION ALL
+          SELECT p.id, e.habit_id, e.effective_date, 'active', 'paused', p.reason, p.created_at_utc_us, 1
+          FROM habit_lifecycle_start_pauses p
+          JOIN habit_lifecycle_events e ON e.id = p.initial_event_id
+          WHERE e.habit_id = ?
+          ORDER BY effective_date ASC, ordering ASC, created_at_utc_us ASC, id ASC
         ''',
-              variables: [Variable<String>(habitId)],
+              variables: [Variable<String>(habitId), Variable<String>(habitId)],
             )
             .get();
         return List.unmodifiable([for (final row in rows) _mapEvent(row)]);
@@ -121,26 +135,42 @@ class HabitLifecycleStore {
         'Backdated lifecycle changes require a correction workflow',
       );
     }
-    final latest = await _db
-        .customSelect(
-          '''
-      SELECT state, effective_date FROM habit_lifecycle_events
-      WHERE habit_id = ? ORDER BY effective_date DESC LIMIT 1
-    ''',
-          variables: [Variable<String>(habitId)],
-        )
-        .getSingleOrNull();
-    final previous = latest == null
-        ? null
-        : HabitLifecycleState.values.byName(latest.read<String>('state'));
-    if (latest != null &&
-        date.compareTo(latest.read<String>('effective_date')) <= 0) {
+    final history = await HabitLifecycleReader(_db).readHistory(habitId);
+    final latest = history.isEmpty ? null : history.last;
+    final previous = latest?.state;
+    if (latest != null && date.compareTo(_key(latest.effectiveDate)) <= 0) {
       throw StateError(
         'Lifecycle events must be appended on distinct later dates',
       );
     }
     if (!_allowed(previous, state)) {
       throw StateError('Invalid lifecycle transition');
+    }
+    final conflictingOccurrence = await _db
+        .customSelect(
+          '''
+      SELECT 1 FROM habit_checklist_occurrences
+      WHERE habit_id = ? AND local_date >= ?
+      UNION ALL
+      SELECT 1 FROM habit_avoidance_occurrences
+      WHERE habit_id = ? AND local_date >= ?
+      UNION ALL
+      SELECT 1 FROM habit_typed_occurrences
+      WHERE habit_id = ? AND local_date >= ?
+      LIMIT 1
+      ''',
+          variables: [
+            Variable<String>(habitId),
+            Variable<String>(date),
+            Variable<String>(habitId),
+            Variable<String>(date),
+            Variable<String>(habitId),
+            Variable<String>(date),
+          ],
+        )
+        .getSingleOrNull();
+    if (conflictingOccurrence != null) {
+      throw StateError('Lifecycle correction workflow required');
     }
     await _db.customStatement(
       '''
@@ -221,15 +251,8 @@ class HabitApplicabilityReader {
             versionId: null,
           );
         }
-        final event = await _db
-            .customSelect(
-              '''
-      SELECT state FROM habit_lifecycle_events
-      WHERE habit_id = ? AND effective_date <= ? ORDER BY effective_date DESC LIMIT 1
-    ''',
-              variables: [Variable<String>(habitId), Variable<String>(key)],
-            )
-            .getSingleOrNull();
+        final event = await HabitLifecycleReader(_db)
+            .findEffectiveOn(habitId, date);
         if (event == null) {
           return (
             applicability: HabitApplicability.unknown,
@@ -238,9 +261,7 @@ class HabitApplicabilityReader {
             versionId: null,
           );
         }
-        final state = HabitLifecycleState.values.byName(
-          event.read<String>('state'),
-        );
+        final state = event.state;
         if (state != HabitLifecycleState.active) {
           return (
             applicability: HabitApplicability.notApplicable,

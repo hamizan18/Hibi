@@ -110,21 +110,9 @@ class CounterHistoryReader {
   }) => _db.transaction(() async {
     await _requireHabit(habitId);
     final asOfKey = _dateKey(asOfDate);
-    final latestLifecycle = await _db
-        .customSelect(
-          '''
-      SELECT state FROM habit_lifecycle_events
-      WHERE habit_id = ? AND effective_date <= ?
-      ORDER BY effective_date DESC LIMIT 1
-      ''',
-          variables: [Variable<String>(habitId), Variable<String>(asOfKey)],
-        )
-        .getSingleOrNull();
-    if (latestLifecycle == null ||
-        HabitLifecycleState.values.byName(
-              latestLifecycle.read<String>('state'),
-            ) !=
-            HabitLifecycleState.active) {
+    final latestLifecycle = await HabitLifecycleReader(_db)
+        .findEffectiveOn(habitId, asOfDate);
+    if (latestLifecycle?.state != HabitLifecycleState.active) {
       return const <CounterRecoverableDeficit>[];
     }
 

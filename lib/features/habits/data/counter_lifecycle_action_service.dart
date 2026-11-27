@@ -1,3 +1,5 @@
+import 'package:drift/drift.dart';
+
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
 import '../domain/habit_schedule.dart';
@@ -11,6 +13,64 @@ class CounterLifecycleActionService {
 
   final AppDatabase _db;
   final AppClock _clock;
+
+  /// Pause an unstarted habit from its initial start date without changing the
+  /// original lifecycle event. The caller must confirm the identified event.
+  Future<void> pauseFutureStart({
+    required String eventId,
+    required String habitId,
+    required String expectedInitialEventId,
+    String? reason,
+  }) => _db.transaction(() async {
+    if (eventId.trim().isEmpty) throw ArgumentError('Event ID is required');
+    final now = _clock.now();
+    final localNow = now.toLocal();
+    final today = LocalDate(localNow.year, localNow.month, localNow.day);
+    final history = await HabitLifecycleReader(_db).readHistory(habitId);
+    if (history.length != 1 ||
+        history.single.id != expectedInitialEventId ||
+        history.single.previousState != null ||
+        history.single.state != HabitLifecycleState.active ||
+        history.single.effectiveDate.compareTo(today) < 0) {
+      throw StateError(
+        'Initial lifecycle changed or the habit already started',
+      );
+    }
+    final firstVersion = await _db
+        .customSelect(
+          'SELECT MIN(effective_start) AS first_date FROM habit_versions WHERE habit_id = ?',
+          variables: [Variable<String>(habitId)],
+        )
+        .getSingle();
+    final start = history.single.effectiveDate;
+    final startKey =
+        '${start.year.toString().padLeft(4, '0')}-${start.month.toString().padLeft(2, '0')}-${start.day.toString().padLeft(2, '0')}';
+    if (firstVersion.readNullable<String>('first_date') != startKey) {
+      throw StateError('Initial lifecycle and habit start do not match');
+    }
+    final occurrence = await _db.customSelect(
+      '''
+      SELECT 1 FROM habit_occurrences WHERE habit_id = ?
+      UNION ALL SELECT 1 FROM habit_checklist_occurrences WHERE habit_id = ?
+      UNION ALL SELECT 1 FROM habit_avoidance_occurrences WHERE habit_id = ?
+      UNION ALL SELECT 1 FROM habit_typed_occurrences WHERE habit_id = ?
+      LIMIT 1
+      ''',
+      variables: List.generate(4, (_) => Variable<String>(habitId)),
+    ).getSingleOrNull();
+    if (occurrence != null) {
+      throw StateError('Existing occurrences require a correction workflow');
+    }
+    await _db.customStatement(
+      'INSERT INTO habit_lifecycle_start_pauses (id, initial_event_id, created_at_utc_us, reason) VALUES (?, ?, ?, ?)',
+      [
+        eventId,
+        expectedInitialEventId,
+        now.toUtc().microsecondsSinceEpoch,
+        reason,
+      ],
+    );
+  });
 
   Future<CounterHabitConfiguration> pause({
     required String eventId,

@@ -106,7 +106,7 @@ void main() {
     expect(summaries[3].trackingType, HabitTrackingType.counter);
   });
 
-  test('version 10 migration preserves existing schedules and occurrences and upgrades to version 11', () async {
+  test('version 10 migration preserves existing schedules and occurrences and upgrades to version 12', () async {
     final dir = await Directory.systemTemp.createTemp('hibi_v10_to_v11_');
     addTearDown(() => dir.delete(recursive: true));
     final file = File(path.join(dir.path, 'db.sqlite'));
@@ -139,7 +139,7 @@ void main() {
     expect(
       (await migrated.customSelect('PRAGMA user_version').getSingle())
           .read<int>('user_version'),
-      11,
+      12,
     );
     final summaries = await UnifiedHabitRegistryReader(migrated)
         .readAll(asOfDate: LocalDate(2026, 11, 26));

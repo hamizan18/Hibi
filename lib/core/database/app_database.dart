@@ -21,7 +21,7 @@ class AppDatabase extends GeneratedDatabase {
   factory AppDatabase.open() => AppDatabase(_openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   // Tables are managed explicitly in the migration until generated Drift
   // tables are needed. Custom queries below do not rely on table notifications.
@@ -47,10 +47,11 @@ class AppDatabase extends GeneratedDatabase {
       await _createCounterResolutionSchema();
       await _createCounterRecoverySchema();
       await _createV11Schemas();
+      await _createLifecycleStartPauseSchema();
     },
     // Unknown upgrades and downgrades must never silently discard data.
     onUpgrade: (migrator, from, to) async {
-      if (from < 1 || from > 10 || to != 11) {
+      if (from < 1 || from > 11 || to != 12) {
         throw StateError('No database migration from version $from to $to');
       }
       await transaction(() async {
@@ -60,14 +61,15 @@ class AppDatabase extends GeneratedDatabase {
         if (from <= 4) await _createOccurrenceSchema();
         if (from <= 5) {
           await _createScheduleSchema();
-        } else {
+        } else if (from <= 10) {
           await _upgradeScheduleSchemaToV11();
         }
         if (from <= 6) await _createLifecycleSchema();
         if (from <= 7) await _createCounterEventAuditSchema();
         if (from <= 8) await _createCounterResolutionSchema();
         if (from <= 9) await _createCounterRecoverySchema();
-        await _createV11Schemas();
+        if (from <= 10) await _createV11Schemas();
+        await _createLifecycleStartPauseSchema();
       });
     },
     beforeOpen: (details) async {
@@ -402,6 +404,28 @@ class AppDatabase extends GeneratedDatabase {
         BEFORE $operation ON habit_lifecycle_events
         BEGIN
           SELECT RAISE(ABORT, 'lifecycle correction workflow required');
+        END
+      ''');
+    }
+  }
+
+  Future<void> _createLifecycleStartPauseSchema() async {
+    await customStatement('''
+      CREATE TABLE habit_lifecycle_start_pauses (
+        id TEXT NOT NULL PRIMARY KEY CHECK (length(trim(id)) > 0),
+        initial_event_id TEXT NOT NULL UNIQUE
+          REFERENCES habit_lifecycle_events(id) ON DELETE RESTRICT
+          CHECK (length(trim(initial_event_id)) > 0),
+        created_at_utc_us INTEGER NOT NULL CHECK (typeof(created_at_utc_us) = 'integer'),
+        reason TEXT
+      )
+    ''');
+    for (final operation in ['UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER habit_lifecycle_start_pauses_no_${operation.toLowerCase()}
+        BEFORE $operation ON habit_lifecycle_start_pauses
+        BEGIN
+          SELECT RAISE(ABORT, 'lifecycle start pauses are immutable');
         END
       ''');
     }
