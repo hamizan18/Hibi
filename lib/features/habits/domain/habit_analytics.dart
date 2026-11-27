@@ -58,6 +58,8 @@ class UnifiedHabitDayEvaluation {
     required this.summaryText,
     required this.hasOccurrence,
     this.checklistCounts,
+    this.scoringUnavailable = false,
+    this.normalizedScore,
   }) : partialRatio = partialRatio.clamp(0.0, 1.0);
 
   final String habitId;
@@ -78,6 +80,8 @@ class UnifiedHabitDayEvaluation {
   final String summaryText;
   final bool hasOccurrence;
   final ChecklistCoverageCounts? checklistCounts;
+  final bool scoringUnavailable;
+  final double? normalizedScore;
 
   /// Priority weights: Critical 4, High 3, Normal 2, Low 1.
   int get priorityWeight => priority.weight;
@@ -105,6 +109,14 @@ class UnifiedHabitDayEvaluation {
   /// habits with [includeInScore] == false are excluded (null).
   double? get scoreMultiplier {
     if (!includeInScore) return null;
+    if (scoringUnavailable) return null;
+    if (normalizedScore != null &&
+        (status == HabitAnalyticsStatus.completed ||
+            status == HabitAnalyticsStatus.partial ||
+            status == HabitAnalyticsStatus.failed ||
+            status == HabitAnalyticsStatus.recovered)) {
+      return normalizedScore!.clamp(0.0, 1.0);
+    }
     switch (status) {
       case HabitAnalyticsStatus.completed:
         return 1.0;
@@ -189,6 +201,8 @@ class DailyScoreSummary {
     required this.applicableChecklistItems,
     required this.recordedChecklistItems,
     required this.checklistItemCoveragePercent,
+    this.validScoreCount = 0,
+    this.unavailableRecordedScoreCount = 0,
   });
 
   final LocalDate date;
@@ -206,6 +220,14 @@ class DailyScoreSummary {
   final int applicableChecklistItems;
   final int recordedChecklistItems;
   final double? checklistItemCoveragePercent;
+  final int validScoreCount;
+  final int unavailableRecordedScoreCount;
+  double? get scoreCoveragePercent =>
+      validScoreCount + unavailableRecordedScoreCount == 0
+      ? null
+      : 100.0 *
+            validScoreCount /
+            (validScoreCount + unavailableRecordedScoreCount);
 
   /// True when at least one applicable habit is still pending, ensuring
   /// incomplete recording never looks like 100% full completion.
@@ -231,6 +253,8 @@ class DailyWeightedScoreCalculator {
     var conflictCount = 0;
     var applicableChecklistItems = 0;
     var recordedChecklistItems = 0;
+    var validScoreCount = 0;
+    var unavailableRecordedScoreCount = 0;
 
     for (final eval in evaluations) {
       if (eval.status == HabitAnalyticsStatus.conflict) {
@@ -260,9 +284,15 @@ class DailyWeightedScoreCalculator {
 
       final multiplier = eval.scoreMultiplier;
       if (multiplier != null) {
+        validScoreCount += 1;
         final weight = eval.priorityWeight;
         weightedNumerator += weight * multiplier;
         eligibleWeightSum += weight;
+      } else if (eval.includeInScore &&
+          eval.scoringUnavailable &&
+          eval.isRecordedApplicable &&
+          eval.status != HabitAnalyticsStatus.excused) {
+        unavailableRecordedScoreCount += 1;
       }
     }
 
@@ -301,6 +331,8 @@ class DailyWeightedScoreCalculator {
       applicableChecklistItems: applicableChecklistItems,
       recordedChecklistItems: recordedChecklistItems,
       checklistItemCoveragePercent: checklistCoveragePercent,
+      validScoreCount: validScoreCount,
+      unavailableRecordedScoreCount: unavailableRecordedScoreCount,
     );
   }
 }
@@ -360,6 +392,7 @@ class HabitStreakSummary {
 /// - Follows scheduled occurrences, not raw calendar days.
 /// - Unscheduled/paused (notApplicable) and excused dates neither increment nor break.
 /// - Past pending makes the streak unresolved; current pending on [asOfDate] does not reset it.
+/// - Unknown or conflicting dates make continuity unresolved, including on [asOfDate].
 /// - Confirmed failure (or past partial, or recovered under [StreakCompletionMode.completedOnly]) breaks it.
 class HabitStreakEvaluator {
   const HabitStreakEvaluator._();
@@ -415,8 +448,13 @@ class HabitStreakEvaluator {
       final isToday = eval.date.compareTo(asOfDate) == 0;
 
       switch (eval.status) {
-        case HabitAnalyticsStatus.notApplicable || HabitAnalyticsStatus.unknown:
+        case HabitAnalyticsStatus.notApplicable:
           skippedNotApplicable += 1;
+        case HabitAnalyticsStatus.unknown || HabitAnalyticsStatus.conflict:
+          // Neither applicability nor an outcome is confirmed, so this date
+          // cannot join confirmed runs or count as a failure.
+          hasUnresolvedSinceLastBreak = true;
+          currentRun = 0;
         case HabitAnalyticsStatus.excused:
           applicableDays += 1;
           excusedDays += 1;
@@ -442,7 +480,7 @@ class HabitStreakEvaluator {
             hasUnresolvedSinceLastBreak = false;
             lastRelevantBroke = true;
           }
-        case HabitAnalyticsStatus.failed || HabitAnalyticsStatus.conflict:
+        case HabitAnalyticsStatus.failed:
           applicableDays += 1;
           failedDays += 1;
           currentRun = 0;
@@ -473,9 +511,7 @@ class HabitStreakEvaluator {
     }
 
     final StreakResolutionState state;
-    if (applicableDays == 0) {
-      state = StreakResolutionState.noApplicableHistory;
-    } else if (hasUnresolvedSinceLastBreak) {
+    if (hasUnresolvedSinceLastBreak) {
       state = StreakResolutionState.unresolved;
     } else if (lastRelevantBroke && currentRun == 0) {
       state = StreakResolutionState.broken;
@@ -600,6 +636,8 @@ class PeriodAnalyticsReport {
     required this.totalPartialHabits,
     required this.totalFailedHabits,
     required this.totalExcusedHabits,
+    this.validScoreCount = 0,
+    this.unavailableRecordedScoreCount = 0,
     required List<CalendarHeatmapCell> dailyCells,
     required List<CategoryAnalyticsBreakdown> categoryBreakdowns,
     required List<HabitPeriodSummaryRow> habitSummaries,
@@ -628,6 +666,14 @@ class PeriodAnalyticsReport {
   final int totalPartialHabits;
   final int totalFailedHabits;
   final int totalExcusedHabits;
+  final int validScoreCount;
+  final int unavailableRecordedScoreCount;
+  double? get scoreCoveragePercent =>
+      validScoreCount + unavailableRecordedScoreCount == 0
+      ? null
+      : 100.0 *
+            validScoreCount /
+            (validScoreCount + unavailableRecordedScoreCount);
   final List<CalendarHeatmapCell> dailyCells;
   final List<CategoryAnalyticsBreakdown> categoryBreakdowns;
   final List<HabitPeriodSummaryRow> habitSummaries;
@@ -696,6 +742,8 @@ class AnalyticsPeriodReportCalculator {
     var totalExcused = 0;
     var totalChecklistApplicable = 0;
     var totalChecklistRecorded = 0;
+    var validScoreCount = 0;
+    var unavailableRecordedScoreCount = 0;
 
     final byCategory = <String, List<UnifiedHabitDayEvaluation>>{};
     final byHabit = <String, List<UnifiedHabitDayEvaluation>>{};
@@ -723,6 +771,8 @@ class AnalyticsPeriodReportCalculator {
       totalPending += s.pendingApplicableCount;
       totalChecklistApplicable += s.applicableChecklistItems;
       totalChecklistRecorded += s.recordedChecklistItems;
+      validScoreCount += s.validScoreCount;
+      unavailableRecordedScoreCount += s.unavailableRecordedScoreCount;
 
       for (final eval in dayEvals) {
         byHabit.putIfAbsent(eval.habitId, () => []).add(eval);
@@ -876,6 +926,8 @@ class AnalyticsPeriodReportCalculator {
       totalPartialHabits: totalPartial,
       totalFailedHabits: totalFailed,
       totalExcusedHabits: totalExcused,
+      validScoreCount: validScoreCount,
+      unavailableRecordedScoreCount: unavailableRecordedScoreCount,
       dailyCells: dailyCells,
       categoryBreakdowns: categoryBreakdowns,
       habitSummaries: habitSummaries,

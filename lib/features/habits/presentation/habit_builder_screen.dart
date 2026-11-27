@@ -10,6 +10,7 @@ import '../domain/avoidance_habit.dart';
 import '../domain/boolean_duration_habit.dart';
 import '../domain/checklist_habit.dart';
 import '../domain/counter_target.dart';
+import '../domain/dynamic_normalized_scoring.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import '../domain/measurement_time_range_habit.dart';
@@ -48,6 +49,7 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
   final _minimum = TextEditingController(text: '0');
   final _maximum = TextEditingController(text: '1');
   final _time = TextEditingController(text: '09:00');
+  final _tolerance = TextEditingController();
   final _interval = TextEditingController(text: '2');
   final _monthDay = TextEditingController(text: '1');
   final _order = TextEditingController(text: '0');
@@ -77,6 +79,7 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
       _minimum,
       _maximum,
       _time,
+      _tolerance,
       _interval,
       _monthDay,
       _order,
@@ -361,6 +364,7 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
                 ),
                 schedule: schedule,
                 metadata: metadata,
+                scoring: const HabitScoringConfig.measurement(),
               );
         case _TrackingType.timeOfDay:
           await ref
@@ -377,6 +381,9 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
                 ),
                 schedule: schedule,
                 metadata: metadata,
+                scoring: HabitScoringConfig.timeOfDay(
+                  toleranceMinutes: int.parse(_tolerance.text.trim()),
+                ),
               );
         case _TrackingType.range:
           final places = int.parse(_places.text.trim());
@@ -396,6 +403,9 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
                 ),
                 schedule: schedule,
                 metadata: metadata,
+                scoring: HabitScoringConfig.range(
+                  toleranceScaled: _scaled(_tolerance.text, places)!,
+                ),
               );
       }
       ref.invalidate(counterTodayRosterProvider);
@@ -558,6 +568,18 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
                     number: true,
                     validator: _scaledValidator,
                   ),
+                  _field(
+                    'Score tolerance (target units)',
+                    _tolerance,
+                    number: true,
+                    validator: (v) {
+                      final error = _scaledValidator(v);
+                      if (error != null) return error;
+                      return _scaled(v!, int.parse(_places.text))! > 0
+                          ? null
+                          : 'Enter a positive tolerance';
+                    },
+                  ),
                 ],
               ],
               if (_type == _TrackingType.counter ||
@@ -610,10 +632,24 @@ class _HabitBuilderScreenState extends ConsumerState<HabitBuilderScreen> {
                       value: TimeComparisonRule.atOrAfter,
                       child: Text('At or after'),
                     ),
+                    DropdownMenuItem(
+                      value: TimeComparisonRule.atOrNear,
+                      child: Text('At or near'),
+                    ),
                   ],
                   onChanged: _submitting
                       ? null
                       : (v) => setState(() => _timeRule = v!),
+                ),
+                if (_timeRule == TimeComparisonRule.atOrNear)
+                  const Text(
+                    'At or near completes only at the exact target minute.',
+                  ),
+                _field(
+                  'Score tolerance (minutes)',
+                  _tolerance,
+                  number: true,
+                  validator: (v) => _integer(v, min: 1),
                 ),
               ],
               DropdownButtonFormField<_ScheduleType>(

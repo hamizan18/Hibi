@@ -23,11 +23,22 @@ Before marking a milestone complete, run relevant `dart format .`, `flutter anal
 
 For Android process-restart persistence verification, use a separate test application ID and private storage, not the user's `com.example.hibi` database. The test should use the real `AppDatabase.open()` path, write a known marker and process ID, stop its process, relaunch, and verify both the marker and a different process ID. Remove only the test application and its own data afterwards. A database file's existence alone does not establish that a written value survived. Record the device, commands, outcomes and any limitations in PROGRESS.md.
 
-## Historical correction acceptance (planned; not yet implemented)
+## Milestone 2 validation gaps
+
+- Android visual checks, Android database migration and current-milestone Android restart verification remain outstanding. There is no `integration_test/` suite. Use a separate test application ID and isolated storage for migration probes; never clear or uninstall the user's app to test migration.
+- Recorded boolean, duration, measurement, time-of-day and range outcomes now have isolated history coverage, including a read-only `total_changes()` check. Extend mixed-type and historical-privacy fixtures and verify every relevant occurrence/log table as needed.
+- Exercise period presets, combined filters, hidden selections, both streak modes, empty and pending views, private-data redaction during reload, screen-reader semantics, enlarged text, small screens and Japanese glyphs.
+- Verify local midnight, time-zone changes, leap days and month/year boundaries in the history and correction flows. Verify actual older Android database upgrades and rollback with representative data; host migration fixtures are not Android verification.
+- Dynamic normalized scoring has automated formula, service, aggregation, form and isolated migration coverage. Android-specific migration, visual behavior and time-zone/device-clock changes remain unverified. See ARCHITECTURE.md for supported and unavailable score cases.
+
+## Historical correction acceptance (partially implemented)
+
+Counter target correction has a preview, confirmation, immutable audit and host-side recalculation coverage. The wider scenarios below are acceptance targets, not a claim that every scenario or every tracking type has been verified.
 
 - Preview a counter target correction spanning multiple versions and existing occurrences: show exact local date range, original/proposed targets, affected record counts, and possible score, streak and reward impact; distinguish unknown impact from zero.
 - Cancel or decline confirmation: all versions, occurrences, events, recoveries, audit entries and derived state remain unchanged.
 - Change any affected version, schedule, occurrence, event or recovery after preview: confirmation must fail as stale without writes; a new preview is required. Exercise a local-day boundary and time-zone change.
+- A confirmation displaying cross-habit scores must detect changes in contributing habit data before commit. Analytics-bound previews now include the habit-table snapshot in stale checks; see `test/correction_impact_staleness_test.dart`.
 - Confirm a valid correction: preserve preimages and source events, resolve versions deterministically without overlap, append old/new audit snapshots, and reconcile every implemented affected derived value. Verify an occurrence before the range and an unrelated habit stay unchanged.
 - Reject incompatible tracking-type/unit reinterpretation; preserve missing and pending records, and never invent failures or recovery quantities.
 - Inject a failure after partial mutation, after audit insertion and during any derived-data reconciliation; each failure must leave the database and derived state unchanged. Repeating a confirmed request must not duplicate changes or rewards.

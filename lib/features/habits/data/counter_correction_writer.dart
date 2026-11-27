@@ -62,7 +62,22 @@ class CounterCorrectionWriter {
     final endStr = confirmedPreview.effectiveEnd == null
         ? null
         : _dateKey(confirmedPreview.effectiveEnd!);
-    final nowUtcUs = _clock.now().toUtc().microsecondsSinceEpoch;
+    final now = _clock.now();
+    final localNow = now.toLocal();
+    if (LocalDate(
+          localNow.year,
+          localNow.month,
+          localNow.day,
+        ).compareTo(confirmedPreview.previewedOnLocalDate) !=
+        0) {
+      throw StateError(
+        'Correction preview is stale; generate and confirm a fresh preview',
+      );
+    }
+    final nowUtcUs = now.toUtc().microsecondsSinceEpoch;
+    final readSet =
+        jsonDecode(confirmedPreview.snapshotSignature) as Map<String, dynamic>;
+    final priorAudits = readSet['correction_audits'] as List<dynamic>;
 
     final beforeSnapshot = <String, Object?>{
       'version_id': proposal.versionId,
@@ -71,6 +86,9 @@ class CounterCorrectionWriter {
       'effective_end': endStr,
       'target_count': confirmedPreview.originalTarget.count,
       'unit': confirmedPreview.originalTarget.unit,
+      'previous_correction_audit_id': priorAudits.isEmpty
+          ? null
+          : (priorAudits.last as Map<String, dynamic>)['id'],
       'affected_occurrences': [
         for (final occ in confirmedPreview.affectedOccurrences)
           {
@@ -81,6 +99,9 @@ class CounterCorrectionWriter {
             'original_status': occ.originalProgressStatus.name,
           },
       ],
+      // These are the exact immutable source preimages bound by the preview.
+      // They also establish which recoveries existed at each correction.
+      'source_occurrences': readSet['occurrences'],
     };
 
     final afterSnapshot = <String, Object?>{

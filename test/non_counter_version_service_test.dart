@@ -93,11 +93,10 @@ void main() {
     expect(chkConfig.effectiveVersion!.checklistItems!.length, 1);
     expect(chkConfig.futureVersions.single.checklistItems!.length, 2);
     expect(chkConfig.versionAudits.length, 2);
-    expect(chkConfig.versionAudits.last.operation, 'schedule_version');
-    expect(
-      chkConfig.versionAudits.last.updatedValues.containsKey('new_version'),
-      isTrue,
+    final scheduledAudit = chkConfig.versionAudits.singleWhere(
+      (audit) => audit.operation == 'schedule_version',
     );
+    expect(scheduledAudit.updatedValues.containsKey('new_version'), isTrue);
 
     // 2. Avoidance
     await avoidance.create(

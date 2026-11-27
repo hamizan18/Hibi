@@ -35,6 +35,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
   late LocalDate _selectedDate;
 
   late Future<AnalyticsDashboardSnapshot> _snapshotFuture;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -60,10 +61,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
       case AnalyticsPeriodPreset.last30Days:
         return (_daysBefore(end, 29), end);
       case AnalyticsPeriodPreset.currentMonth:
-        final start = LocalDate(end.year, end.month, 1);
-        final lastDay = DateTime.utc(end.year, end.month + 1, 0).day;
-        final monthEnd = LocalDate(end.year, end.month, lastDay);
-        return (start, monthEnd);
+        return (LocalDate(end.year, end.month, 1), end);
     }
   }
 
@@ -76,7 +74,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   String _formatPercent(double? value) =>
-      value == null ? 'No Data' : '${value.toStringAsFixed(1)}%';
+      value == null ? 'N/A' : '${value.toStringAsFixed(1)}%';
 
   void _load() {
     final (start, end) = _resolveRange();
@@ -84,22 +82,46 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
         _selectedDate.compareTo(end) > 0) {
       _selectedDate = widget.asOfDate;
     }
-    final filter = HabitAnalyticsFilter(
-      habitId: _selectedHabitId,
-      category: _selectedCategory,
-      trackingType: _selectedType,
-      priority: _selectedPriority,
-      includePrivate: _showPrivate,
+    final generation = ++_loadGeneration;
+    final reader = ref.read(analyticsReportReaderProvider);
+    final asOfDate = widget.asOfDate;
+    final streakMode = _streakMode;
+    final category = _selectedCategory;
+    final habitId = _selectedHabitId;
+    final trackingType = _selectedType;
+    final priority = _selectedPriority;
+    final includePrivate = _showPrivate;
+
+    Future<AnalyticsDashboardSnapshot> readSnapshot(
+      String? selectedCategory,
+      String? selectedHabitId,
+    ) => reader.readDashboardSnapshot(
+      startInclusive: start,
+      endInclusive: end,
+      asOfDate: asOfDate,
+      streakMode: streakMode,
+      filter: HabitAnalyticsFilter(
+        habitId: selectedHabitId,
+        category: selectedCategory,
+        trackingType: trackingType,
+        priority: priority,
+        includePrivate: includePrivate,
+      ),
     );
-    _snapshotFuture = ref
-        .read(analyticsReportReaderProvider)
-        .readDashboardSnapshot(
-          startInclusive: start,
-          endInclusive: end,
-          asOfDate: widget.asOfDate,
-          streakMode: _streakMode,
-          filter: filter,
-        );
+
+    _snapshotFuture = () async {
+      final snapshot = await readSnapshot(category, habitId);
+      if (!mounted || generation != _loadGeneration) return snapshot;
+      final invalidCategory =
+          category != null && !snapshot.availableCategories.contains(category);
+      final invalidHabit =
+          habitId != null &&
+          !snapshot.availableHabits.any((h) => h.habitId == habitId);
+      if (!invalidCategory && !invalidHabit) return snapshot;
+      if (invalidCategory) _selectedCategory = null;
+      if (invalidHabit) _selectedHabitId = null;
+      return readSnapshot(_selectedCategory, _selectedHabitId);
+    }();
   }
 
   void _reload() => setState(_load);
@@ -107,6 +129,8 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<AnalyticsDashboardSnapshot>(
+      // A privacy change must discard the previous snapshot immediately.
+      key: ValueKey(_showPrivate),
       future: _snapshotFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done &&
@@ -212,6 +236,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String?>(
+              key: ValueKey(('category', validCategory)),
               initialValue: validCategory,
               decoration: const InputDecoration(labelText: 'Filter category'),
               items: [
@@ -248,6 +273,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
               },
             ),
             DropdownButtonFormField<String?>(
+              key: ValueKey(('habit', validHabit)),
               initialValue: validHabit,
               decoration: const InputDecoration(labelText: 'Filter habit'),
               items: [
@@ -334,7 +360,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
         '${cell.date.month.toString().padLeft(2, '0')}-${cell.date.day.toString().padLeft(2, '0')}';
     final s = cell.scoreSummary;
     final scoreLabel = s.availability == ScoreAvailability.noData
-        ? (s.pendingApplicableCount > 0 ? 'Pending' : 'No Data')
+        ? 'N/A'
         : '${s.weightedScorePercent!.toStringAsFixed(0)}%';
     final incompleteTag = s.isIncompleteRecording ? ' (partial log)' : '';
 
@@ -382,6 +408,15 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             const SizedBox(height: 8),
             Text('Daily weighted score: $scoreStr$incompleteNote'),
             Text(
+              'Score coverage: ${s.validScoreCount} scored, '
+              '${s.unavailableRecordedScoreCount} recorded N/A '
+              '(${_formatPercent(s.scoreCoveragePercent)})',
+            ),
+            if (s.unavailableRecordedScoreCount > 0)
+              const Text(
+                'Score is incomplete: recorded outcomes with unavailable scores are excluded.',
+              ),
+            Text(
               'Habit recording coverage: ${s.recordedApplicableCount}/${s.applicableHabitCount} '
               '(${_formatPercent(s.recordingCoveragePercent)})',
             ),
@@ -398,7 +433,7 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
                 Text(
                   '• ${eval.name} [${eval.category}, weight ${eval.priorityWeight}]: '
                   '${eval.status.name} (${eval.summaryText})'
-                  '${eval.includeInScore ? '' : ' [excluded from score]'}',
+                  '${eval.includeInScore ? (eval.scoringUnavailable && eval.isRecordedApplicable && eval.status != HabitAnalyticsStatus.excused ? ' [score N/A]' : '') : ' [excluded from score]'}',
                 ),
           ],
         ),
@@ -428,6 +463,15 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             Text(
               'Overall period weighted score: ${_formatPercent(report.overallWeightedScorePercent)}',
             ),
+            Text(
+              'Score coverage: ${report.validScoreCount} scored, '
+              '${report.unavailableRecordedScoreCount} recorded N/A '
+              '(${_formatPercent(report.scoreCoveragePercent)})',
+            ),
+            if (report.unavailableRecordedScoreCount > 0)
+              const Text(
+                'Period score is incomplete: recorded outcomes with unavailable scores are excluded.',
+              ),
             Text(
               'Eligible score days: ${report.eligibleScoreDays} | '
               'No Data days: ${report.noDataDays} | '
@@ -506,7 +550,8 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             const SizedBox(height: 4),
             const Text(
               'Unscheduled, paused and excused dates neither increment nor break streaks. '
-              'Past pending dates make a streak unresolved; current-day pending does not reset it.',
+              'Past pending dates and unknown or conflicting data make a streak unresolved; '
+              'current-day pending does not reset it.',
             ),
             const SizedBox(height: 12),
             if (streaks.isEmpty)

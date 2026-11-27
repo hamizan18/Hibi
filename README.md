@@ -4,7 +4,7 @@ Small steps, every day. An offline-first personal life management application fo
 
 ## Status
 
-Milestone 0 foundation acceptance is verified. Milestone 1 is in progress: only initial habit database schema exists. Habit tracking, history, finance and other product features are not operational yet. See `docs/PROGRESS.md` and `docs/ROADMAP.md`.
+Milestone 0 is accepted. Milestones 1 (habits) and 2 (history and analytics) have host-side acceptance coverage and a debug APK build, but Android device visual and migration verification remain outstanding. Owner acceptance of Milestone 2 is pending; Finance is not implemented. See `docs/PROGRESS.md` and `docs/ROADMAP.md`.
 
 ## Development
 

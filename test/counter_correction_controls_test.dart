@@ -7,9 +7,11 @@ import 'package:hibi/core/services/app_clock.dart';
 import 'package:hibi/features/habits/data/counter_correction_writer.dart';
 import 'package:hibi/features/habits/data/counter_day_reader.dart';
 import 'package:hibi/features/habits/data/counter_habit_writer.dart';
+import 'package:hibi/features/habits/data/habit_metadata_store.dart';
 import 'package:hibi/features/habits/data/counter_today_action_service.dart';
 import 'package:hibi/features/habits/data/unified_habit_registry.dart';
 import 'package:hibi/features/habits/domain/counter_day_status.dart';
+import 'package:hibi/features/habits/domain/habit_metadata.dart';
 import 'package:hibi/features/habits/domain/counter_target.dart';
 import 'package:hibi/features/habits/domain/habit_schedule.dart';
 import 'package:hibi/features/habits/presentation/counter_correction_controls.dart';
@@ -39,6 +41,8 @@ void main() {
         target: CounterTarget(count: 10, unit: 'reps'),
         schedule: DailySchedule(start: today),
       );
+      await HabitMetadataStore(db)
+          .insert('v1', HabitMetadata(category: 'Exercise', isPrivate: false));
       await CounterTodayActionService(db, clock).recordTodayProgress(
         habitId: 'h',
         occurrenceId: 'o_26',

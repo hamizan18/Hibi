@@ -44,6 +44,11 @@ class _CounterCorrectionControlsState
   bool _expanded = false;
   String? _error;
   int _generation = 0;
+  BuildContext? _dialogContext;
+
+  bool _isVisible(CounterVersionSnapshot version) =>
+      widget.showPrivateHistory ||
+      (version.metadata != null && !version.metadata!.isPrivate);
 
   String _id() => List.generate(
     16,
@@ -63,7 +68,16 @@ class _CounterCorrectionControlsState
   void didUpdateWidget(covariant CounterCorrectionControls oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.habit.habitId != widget.habit.habitId ||
-        oldWidget.date.compareTo(widget.date) != 0) {
+        oldWidget.date.compareTo(widget.date) != 0 ||
+        oldWidget.showPrivateHistory != widget.showPrivateHistory) {
+      final dialogContext = _dialogContext;
+      if (dialogContext != null) {
+        _dialogContext = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (dialogContext.mounted) Navigator.of(dialogContext).pop(false);
+        });
+      }
+      _busy = false;
       _expanded = false;
       _load();
     }
@@ -89,11 +103,12 @@ class _CounterCorrectionControlsState
           .read(habitId: widget.habit.habitId, asOfDate: widget.date);
       if (!mounted || generation != _generation) return;
       final eligible = config.allVersions
-          .where((v) => v.target != null)
+          .where((v) => v.target != null && _isVisible(v))
           .toList();
       final chosen =
           config.effectiveVersion != null &&
-              config.effectiveVersion!.target != null
+              config.effectiveVersion!.target != null &&
+              _isVisible(config.effectiveVersion!)
           ? config.effectiveVersion!
           : (eligible.isNotEmpty ? eligible.last : null);
       setState(() {
@@ -126,7 +141,7 @@ class _CounterCorrectionControlsState
   Future<void> _previewAndConfirm() async {
     final version = _selectedVersion();
     if (_busy || _loading || version == null || version.target == null) return;
-    if (version.metadata?.isPrivate == true && !widget.showPrivateHistory) {
+    if (!_isVisible(version)) {
       setState(() {
         _error = 'Reveal private habits before previewing a private version.';
       });
@@ -147,6 +162,8 @@ class _CounterCorrectionControlsState
       _error = null;
     });
     final habitId = widget.habit.habitId;
+    final generation = _generation;
+    final includePrivate = widget.showPrivateHistory;
     AnalyticsCorrectionImpactPreview impact;
     try {
       impact = await ref
@@ -159,9 +176,10 @@ class _CounterCorrectionControlsState
               proposedUnit: version.target!.unit,
               reason: _reason.text.trim().isEmpty ? null : _reason.text.trim(),
             ),
+            includePrivate: includePrivate,
           );
     } on Object catch (e) {
-      if (!mounted || widget.habit.habitId != habitId) return;
+      if (!mounted || generation != _generation) return;
       setState(() {
         _busy = false;
         _error =
@@ -171,64 +189,68 @@ class _CounterCorrectionControlsState
     }
     final preview = impact.preview;
 
-    if (!mounted || widget.habit.habitId != habitId) return;
+    if (!mounted || generation != _generation) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm historical target correction?'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(preview.englishConfirmationSummary),
-              const SizedBox(height: 8),
-              for (final occ in preview.affectedOccurrences)
-                Text(
-                  '• ${_formatDate(occ.date)}: recorded ${occ.recordedTotal} '
-                  '(${occ.originalProgressStatus.name} @ ${occ.originalTarget} -> '
-                  '${occ.proposedProgressStatus.name} @ ${occ.proposedTarget})',
-                ),
-              if (impact.dateScoreImpacts.isNotEmpty) ...[
+      builder: (context) {
+        _dialogContext = context;
+        return AlertDialog(
+          title: const Text('Confirm historical target correction?'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(preview.englishConfirmationSummary),
                 const SizedBox(height: 8),
-                const Text('Recalculated daily weighted score impact:'),
-                for (final s in impact.dateScoreImpacts)
+                for (final occ in preview.affectedOccurrences)
                   Text(
-                    '• ${_formatDate(s.date)}: '
-                    '${s.beforeScorePercent == null ? 'No Data' : '${s.beforeScorePercent!.toStringAsFixed(1)}%'} -> '
-                    '${s.afterScorePercent == null ? 'No Data' : '${s.afterScorePercent!.toStringAsFixed(1)}%'}',
+                    '• ${_formatDate(occ.date)}: recorded ${occ.recordedTotal} '
+                    '(${occ.originalProgressStatus.name} @ ${occ.originalTarget} -> '
+                    '${occ.proposedProgressStatus.name} @ ${occ.proposedTarget})',
                   ),
+                if (impact.dateScoreImpacts.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Recalculated daily weighted score impact:'),
+                  for (final s in impact.dateScoreImpacts)
+                    Text(
+                      '• ${_formatDate(s.date)}: '
+                      '${s.beforeScorePercent == null ? 'No Data' : '${s.beforeScorePercent!.toStringAsFixed(1)}%'} -> '
+                      '${s.afterScorePercent == null ? 'No Data' : '${s.afterScorePercent!.toStringAsFixed(1)}%'}',
+                    ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'Recalculated streak (completed + recovered): '
+                  '${impact.beforeStreakWithRecovery.currentStreak} -> '
+                  '${impact.afterStreakWithRecovery.currentStreak} '
+                  '(completed only: ${impact.beforeStreakCompletedOnly.currentStreak} -> '
+                  '${impact.afterStreakCompletedOnly.currentStreak})',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Audit preimages are stored locally in unencrypted SQLite. '
+                  'Reward and achievement recalculation engines are not implemented.',
+                ),
               ],
-              const SizedBox(height: 8),
-              Text(
-                'Recalculated streak (completed + recovered): '
-                '${impact.beforeStreakWithRecovery.currentStreak} -> '
-                '${impact.afterStreakWithRecovery.currentStreak} '
-                '(completed only: ${impact.beforeStreakCompletedOnly.currentStreak} -> '
-                '${impact.afterStreakCompletedOnly.currentStreak})',
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Audit preimages are stored locally in unencrypted SQLite. '
-                'Reward and achievement recalculation engines are not implemented.',
-              ),
-            ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm correction'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm correction'),
+            ),
+          ],
+        );
+      },
     );
+    _dialogContext = null;
 
-    if (!mounted || widget.habit.habitId != habitId) return;
+    if (!mounted || generation != _generation) return;
     if (confirmed != true) {
       setState(() => _busy = false);
       return;
@@ -237,7 +259,7 @@ class _CounterCorrectionControlsState
     try {
       await ref
           .read(counterCorrectionWriterProvider)
-          .commit(correctionAuditId: _id(), confirmedPreview: preview);
+          .commit(correctionAuditId: _id(), confirmedPreview: impact.preview);
       if (!mounted) return;
       _expanded = false;
       _reason.clear();
@@ -266,12 +288,7 @@ class _CounterCorrectionControlsState
     final eligible = config == null
         ? const <CounterVersionSnapshot>[]
         : config.allVersions
-              .where(
-                (v) =>
-                    v.target != null &&
-                    (widget.showPrivateHistory ||
-                        v.metadata?.isPrivate != true),
-              )
+              .where((v) => v.target != null && _isVisible(v))
               .toList();
     final selected = _selectedVersion();
 
@@ -294,6 +311,7 @@ class _CounterCorrectionControlsState
           ),
         if (_expanded && eligible.isNotEmpty) ...[
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: eligible.any((v) => v.versionId == _selectedVersionId)
                 ? _selectedVersionId
                 : eligible.last.versionId,
@@ -304,6 +322,7 @@ class _CounterCorrectionControlsState
                   value: v.versionId,
                   child: Text(
                     'Revision ${v.revision}: ${v.name} (${_formatDate(v.effectiveStart)} to ${v.effectiveEnd == null ? 'open' : _formatDate(v.effectiveEnd!)})',
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
             ],

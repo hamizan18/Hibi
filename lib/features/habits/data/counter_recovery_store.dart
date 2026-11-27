@@ -4,7 +4,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
 import '../domain/counter_recovery.dart';
 import '../domain/habit_schedule.dart';
-import 'counter_progress_reader.dart';
+import 'counter_day_reader.dart';
 import 'counter_resolution.dart';
 import 'habit_lifecycle.dart';
 
@@ -124,32 +124,23 @@ class CounterRecoveryWriter {
       throw StateError('Habit must be active on the recovery date');
     }
 
-    final recorded = await CounterProgressReader(_db).find(occurrenceId);
-    if (recorded == null) throw StateError('Occurrence does not exist');
-
-    final resolution = await CounterResolutionReader(_db).find(occurrenceId);
-    if (resolution == null ||
+    final evaluation = await CounterDayReader(_db)
+        .evaluate(habitId: habitId, date: occurrenceDate);
+    final recorded = evaluation.day.recorded;
+    final resolution = evaluation.day.resolution;
+    if (recorded == null ||
+        resolution == null ||
         resolution.state != CounterResolutionState.failed) {
       throw StateError(
         'Only explicitly failed occurrences are eligible for recovery',
       );
     }
-    if (resolution.target != recorded.progress.target ||
-        resolution.progress != recorded.progress.total) {
-      throw StateError('Resolution snapshot does not match recorded progress');
+    if (evaluation.recovery == null) {
+      throw StateError(
+        'Existing recovery history requires a correction workflow',
+      );
     }
-
-    final existing = await CounterRecoveryReader(_db)
-        .findForOccurrence(occurrenceId);
-    for (final entry in existing) {
-      if (entry.originalTarget != recorded.progress.target ||
-          entry.originalProgress != recorded.progress.total ||
-          _dateKey(entry.recoveryDate).compareTo(occurrenceDateKey) <= 0) {
-        throw StateError(
-          'Existing recovery history requires a correction workflow',
-        );
-      }
-    }
+    final existing = evaluation.day.recoveries;
 
     final summary = CounterRecovery.fromEvents(
       progress: recorded.progress,

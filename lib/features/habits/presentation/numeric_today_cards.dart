@@ -27,6 +27,7 @@ class NumericTodayCard extends ConsumerStatefulWidget {
 
 class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
   final _controller = TextEditingController();
+  int _dayOffset = 0;
   late Future<NumericTodayData?> _data;
   bool _submitting = false;
   String? _error;
@@ -50,6 +51,7 @@ class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
         oldWidget.habit.trackingType != widget.habit.trackingType ||
         oldWidget.date.compareTo(widget.date) != 0) {
       _controller.clear();
+      _dayOffset = 0;
       _error = null;
       _load();
     }
@@ -106,6 +108,7 @@ class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
             occurrenceId: occurrence,
             logId: log,
             minutesSinceMidnight: value,
+            dayOffset: _dayOffset,
           );
         case HabitTrackingType.range:
           await service.logRangeToday(
@@ -165,6 +168,21 @@ class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
                 errorText: _error,
               ),
             ),
+            if (isTime)
+              DropdownButtonFormField<int>(
+                initialValue: _dayOffset,
+                decoration: const InputDecoration(
+                  labelText: 'Time relative to occurrence date',
+                ),
+                items: const [
+                  DropdownMenuItem(value: -1, child: Text('Previous day')),
+                  DropdownMenuItem(value: 0, child: Text('Same day')),
+                  DropdownMenuItem(value: 1, child: Text('Next day')),
+                ],
+                onChanged: _submitting
+                    ? null
+                    : (value) => setState(() => _dayOffset = value!),
+              ),
             ElevatedButton(
               onPressed: _submitting ? null : () => _submit(data),
               child: Text(_submitting ? 'Saving…' : 'Log today'),

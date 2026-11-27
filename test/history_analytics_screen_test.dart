@@ -119,7 +119,7 @@ void main() {
       await tester.tap(cell20);
       await tester.pumpAndSettle();
       expect(find.text('Selected Day: 2026-11-20'), findsOneWidget);
-      expect(find.text('Daily weighted score: No Data'), findsOneWidget);
+      expect(find.text('Daily weighted score: N/A'), findsOneWidget);
 
       // Toggling private visibility reveals Self Control
       final privateSwitch = find.text('Show private or unclassified habits');

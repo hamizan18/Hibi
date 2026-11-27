@@ -2,12 +2,14 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../domain/dynamic_normalized_scoring.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import '../domain/measurement_time_range_habit.dart';
 import 'habit_creation_audit.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
+import 'habit_scoring_store.dart';
 import 'habit_schedule_store.dart';
 
 /// Transactional creation, logging and read-only evaluation for Measurement,
@@ -27,6 +29,7 @@ class MeasurementTimeRangeHabitService {
     required MeasurementTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     await _createBaseVersion(
       habitId: habitId,
@@ -56,6 +59,7 @@ class MeasurementTimeRangeHabitService {
         ruleStr,
       ],
     );
+    await _insertScoring(versionId, scoring, DynamicScoreType.measurement);
     await writeNonCounterCreationAudit(
       _db,
       habitId: habitId,
@@ -74,6 +78,7 @@ class MeasurementTimeRangeHabitService {
     required TimeOfDayTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     await _createBaseVersion(
       habitId: habitId,
@@ -87,6 +92,7 @@ class MeasurementTimeRangeHabitService {
     final ruleStr = switch (target.rule) {
       TimeComparisonRule.atOrBefore => 'at_or_before',
       TimeComparisonRule.atOrAfter => 'at_or_after',
+      TimeComparisonRule.atOrNear => 'at_or_near',
     };
     await _db.customStatement(
       '''
@@ -96,6 +102,7 @@ class MeasurementTimeRangeHabitService {
       ''',
       [versionId, target.targetMinutesSinceMidnight, ruleStr],
     );
+    await _insertScoring(versionId, scoring, DynamicScoreType.timeOfDay);
     await writeNonCounterCreationAudit(
       _db,
       habitId: habitId,
@@ -114,6 +121,7 @@ class MeasurementTimeRangeHabitService {
     required RangeTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     await _createBaseVersion(
       habitId: habitId,
@@ -138,6 +146,7 @@ class MeasurementTimeRangeHabitService {
         target.unit,
       ],
     );
+    await _insertScoring(versionId, scoring, DynamicScoreType.range);
     await writeNonCounterCreationAudit(
       _db,
       habitId: habitId,
@@ -202,8 +211,12 @@ class MeasurementTimeRangeHabitService {
     required String occurrenceId,
     required String logId,
     required int minutesSinceMidnight,
+    int dayOffset = 0,
     String? reason,
   }) => _db.transaction(() async {
+    if (dayOffset < -1 || dayOffset > 1) {
+      throw RangeError.range(dayOffset, -1, 1, 'dayOffset');
+    }
     final now = _clock.now();
     final today = _localDate(now);
     final (occId, versionId) = await _createTodayOccurrence(
@@ -222,22 +235,26 @@ class MeasurementTimeRangeHabitService {
       targetMinutesSinceMidnight: targetRow.read<int>(
         'target_minutes_since_midnight',
       ),
-      rule: targetRow.read<String>('comparison_rule') == 'at_or_before'
-          ? TimeComparisonRule.atOrBefore
-          : TimeComparisonRule.atOrAfter,
+      rule: switch (targetRow.read<String>('comparison_rule')) {
+        'at_or_before' => TimeComparisonRule.atOrBefore,
+        'at_or_after' => TimeComparisonRule.atOrAfter,
+        'at_or_near' => TimeComparisonRule.atOrNear,
+        final rule => throw StateError('Unknown time comparison rule: $rule'),
+      },
     );
-    final status = target.evaluate(minutesSinceMidnight);
+    final status = target.evaluate(minutesSinceMidnight, dayOffset: dayOffset);
     await _db.customStatement(
       '''
       INSERT INTO habit_typed_logs
-        (id, occurrence_id, state, minutes_since_midnight, reason, occurred_at_utc_us)
-      VALUES (?, ?, ?, ?, ?, ?)
+        (id, occurrence_id, state, minutes_since_midnight, day_offset, reason, occurred_at_utc_us)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ''',
       [
         logId,
         occId,
         status.name,
         minutesSinceMidnight,
+        dayOffset,
         reason,
         now.toUtc().microsecondsSinceEpoch,
       ],
@@ -290,6 +307,18 @@ class MeasurementTimeRangeHabitService {
     );
     return status;
   });
+
+  Future<void> _insertScoring(
+    String versionId,
+    HabitScoringConfig? scoring,
+    DynamicScoreType expectedType,
+  ) async {
+    if (scoring == null) return;
+    if (scoring.type != expectedType) {
+      throw ArgumentError('Scoring type does not match habit type');
+    }
+    await HabitScoringStore(_db).insert(versionId, scoring);
+  }
 
   Future<void> _createBaseVersion({
     required String habitId,

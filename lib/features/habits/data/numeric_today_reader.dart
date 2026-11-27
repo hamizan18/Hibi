@@ -48,11 +48,16 @@ class NumericTodayReader {
       final rule = target.read<String>('comparison_rule');
       if (minutes < 0 ||
           minutes > 1439 ||
-          !['at_or_before', 'at_or_after'].contains(rule)) {
+          !['at_or_before', 'at_or_after', 'at_or_near'].contains(rule)) {
         return null;
       }
-      description =
-          '${rule == 'at_or_before' ? 'At or before' : 'At or after'} ${_time(minutes)}';
+      final label = switch (rule) {
+        'at_or_before' => 'At or before',
+        'at_or_after' => 'At or after',
+        'at_or_near' => 'At or near',
+        _ => throw StateError('Unknown time comparison rule: $rule'),
+      };
+      description = '$label ${_time(minutes)}';
     } else {
       places = target.read<int>('decimal_places');
       if (places < 0 || places > 6) return null;

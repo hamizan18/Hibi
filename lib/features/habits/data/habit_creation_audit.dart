@@ -71,6 +71,12 @@ Future<void> writeNonCounterCreationAudit(
   if (trackingType == 'checklist' && items.isEmpty) {
     throw StateError('Checklist creation requires items');
   }
+  final scoring = await db
+      .customSelect(
+        'SELECT * FROM habit_version_scoring WHERE habit_version_id = ?',
+        variables: [Variable<String>(versionId)],
+      )
+      .getSingleOrNull();
 
   final random = Random.secure();
   final auditId = List.generate(
@@ -93,6 +99,7 @@ Future<void> writeNonCounterCreationAudit(
         'lifecycle': lifecycle.data,
         'tracking_type': trackingType,
         'target': target?.data,
+        'scoring': scoring?.data,
         'items': [for (final item in items) item.data],
       }),
       version.read<int>('created_at_utc_us'),

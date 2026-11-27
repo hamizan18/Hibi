@@ -1,6 +1,6 @@
 enum MeasurementComparisonRule { atLeast, atMost, exact }
 
-enum TimeComparisonRule { atOrBefore, atOrAfter }
+enum TimeComparisonRule { atOrBefore, atOrAfter, atOrNear }
 
 enum TypedValueStatus { completed, partial, failed, excused }
 
@@ -54,7 +54,10 @@ class TimeOfDayTarget {
   final int targetMinutesSinceMidnight;
   final TimeComparisonRule rule;
 
-  TypedValueStatus evaluate(int loggedMinutesSinceMidnight) {
+  TypedValueStatus evaluate(
+    int loggedMinutesSinceMidnight, {
+    int dayOffset = 0,
+  }) {
     if (loggedMinutesSinceMidnight < 0 || loggedMinutesSinceMidnight > 1439) {
       throw RangeError.range(
         loggedMinutesSinceMidnight,
@@ -63,13 +66,23 @@ class TimeOfDayTarget {
         'loggedMinutesSinceMidnight',
       );
     }
+    if (dayOffset < -1 || dayOffset > 1) {
+      throw RangeError.range(dayOffset, -1, 1, 'dayOffset');
+    }
+    final absoluteMinutes = loggedMinutesSinceMidnight + dayOffset * 1440;
     final matches = switch (rule) {
       TimeComparisonRule.atOrBefore =>
-        loggedMinutesSinceMidnight <= targetMinutesSinceMidnight,
+        absoluteMinutes <= targetMinutesSinceMidnight,
       TimeComparisonRule.atOrAfter =>
-        loggedMinutesSinceMidnight >= targetMinutesSinceMidnight,
+        absoluteMinutes >= targetMinutesSinceMidnight,
+      TimeComparisonRule.atOrNear =>
+        loggedMinutesSinceMidnight == targetMinutesSinceMidnight,
     };
-    return matches ? TypedValueStatus.completed : TypedValueStatus.failed;
+    return matches
+        ? TypedValueStatus.completed
+        : rule == TimeComparisonRule.atOrNear
+        ? TypedValueStatus.partial
+        : TypedValueStatus.failed;
   }
 }
 

@@ -1,9 +1,14 @@
+import 'dart:convert';
+
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
 import '../domain/counter_progress.dart';
 import '../domain/habit_analytics.dart';
 import '../domain/habit_schedule.dart';
 import 'counter_correction_preview.dart';
+import 'counter_recovery_store.dart';
+import 'habit_lifecycle.dart';
+import 'habit_metadata_store.dart';
 import 'unified_habit_history_reader.dart';
 import 'unified_habit_registry.dart';
 
@@ -17,6 +22,18 @@ class HabitStreakReader {
     required String habitId,
     required LocalDate asOfDate,
     StreakCompletionMode mode = StreakCompletionMode.completedAndRecovered,
+  }) => _readStreakForHabit(
+    habitId: habitId,
+    asOfDate: asOfDate,
+    mode: mode,
+    includePrivate: true,
+  );
+
+  Future<HabitStreakSummary> _readStreakForHabit({
+    required String habitId,
+    required LocalDate asOfDate,
+    required StreakCompletionMode mode,
+    required bool includePrivate,
   }) => _db.transaction(() async {
     final historyReader = UnifiedHabitHistoryReader(_db);
     final earliestStart = await historyReader.findEarliestVersionStart(habitId);
@@ -46,11 +63,21 @@ class HabitStreakReader {
       endInclusive: asOfDate,
     );
     final latest = evaluations.last;
+    // A hidden date is a privacy boundary, not a skipped occurrence: using
+    // either its status or earlier visible dates could reveal continuity across it.
+    var visibleStart = 0;
+    if (!includePrivate) {
+      for (var i = 0; i < evaluations.length; i++) {
+        if (!evaluations[i].hasMetadata || evaluations[i].isPrivate) {
+          visibleStart = i + 1;
+        }
+      }
+    }
     return HabitStreakEvaluator.evaluate(
       habitId: habitId,
       habitName: latest.name,
       asOfDate: asOfDate,
-      chronologicalEvaluations: evaluations,
+      chronologicalEvaluations: evaluations.skip(visibleStart),
       mode: mode,
       includeInStreak: latest.includeInStreak,
     );
@@ -75,10 +102,11 @@ class HabitStreakReader {
       );
       if (!filter.matches(todayEval.single)) continue;
       results.add(
-        await readStreakForHabit(
+        await _readStreakForHabit(
           habitId: habit.habitId,
           asOfDate: asOfDate,
           mode: mode,
+          includePrivate: filter.includePrivate,
         ),
       );
     }
@@ -192,8 +220,20 @@ class AnalyticsReportReader {
       return filter.includePrivate ||
           (h.metadata != null && !h.metadata!.isPrivate);
     }).toList();
+    // Category choices describe the whole selected period, independently of
+    // the selected category and other filters, but never bypass privacy.
+    final categoryDays = await UnifiedHabitHistoryReader(_db).readRange(
+      startInclusive: startInclusive,
+      endInclusive: endInclusive,
+      filter: HabitAnalyticsFilter(includePrivate: filter.includePrivate),
+    );
     final categories = <String>{
-      for (final h in visibleHabits) h.metadata?.category ?? 'Unclassified',
+      for (final evaluations in categoryDays.values)
+        for (final evaluation in evaluations)
+          if (evaluation.trackingType != HabitTrackingType.unconfigured &&
+              evaluation.applicabilityReason !=
+                  HabitApplicabilityReason.beforeStart)
+            evaluation.category,
     }.toList()..sort();
 
     return AnalyticsDashboardSnapshot(
@@ -238,8 +278,70 @@ class AnalyticsCorrectionImpactPreview {
   final HabitStreakSummary afterStreakCompletedOnly;
 }
 
-/// Evaluates the exact before/after Milestone 2 score and streak impact for a
-/// counter target correction proposal inside one read-only transaction.
+// The normal correction preview API remains usable without analytics. An
+// analytics-derived preview carries its extra read set privately, so callers
+// that pass impact.preview directly to the writer cannot lose the binding.
+class _ImpactBoundCorrectionPreview extends CounterCorrectionPreview
+    implements CorrectionPreviewImpactBinding {
+  _ImpactBoundCorrectionPreview(
+    CounterCorrectionPreview source,
+    this._database,
+    this._snapshot,
+  ) : super(
+        proposal: source.proposal,
+        previewedOnLocalDate: source.previewedOnLocalDate,
+        versionName: source.versionName,
+        effectiveStart: source.effectiveStart,
+        effectiveEnd: source.effectiveEnd,
+        originalTarget: source.originalTarget,
+        proposedTarget: source.proposedTarget,
+        affectedOccurrences: source.affectedOccurrences,
+        totalAffectedEventCount: source.totalAffectedEventCount,
+        totalAffectedResolutionCount: source.totalAffectedResolutionCount,
+        totalAffectedRecoveryCount: source.totalAffectedRecoveryCount,
+        scoreImpact: source.scoreImpact,
+        streakImpact: source.streakImpact,
+        rewardImpact: source.rewardImpact,
+        achievementImpact: source.achievementImpact,
+        englishConfirmationSummary: source.englishConfirmationSummary,
+        snapshotSignature: source.snapshotSignature,
+      );
+
+  final AppDatabase _database;
+  final String _snapshot;
+
+  @override
+  Future<bool> isImpactStale(AppDatabase database) async =>
+      !identical(_database, database) ||
+      await _impactSnapshot(database) != _snapshot;
+}
+
+// Include every habit table rather than only the corrected version: score
+// inputs span habits, and streaks span the corrected habit's entire history.
+// This deliberately errs on the side of rejecting an unrelated habit change.
+// The data remains private and is never added to the public preview or audit.
+Future<String> _impactSnapshot(AppDatabase db) async {
+  final tables = await db
+      .customSelect(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND (name = 'habits' OR substr(name, 1, 6) = 'habit_') ORDER BY name",
+      )
+      .get();
+  final snapshot = <String, List<String>>{};
+  for (final table in tables) {
+    final name = table.read<String>('name');
+    final quotedName = name.replaceAll('"', '""');
+    final rows = await db.customSelect('SELECT * FROM "$quotedName"').get();
+    snapshot[name] = [for (final row in rows) jsonEncode(row.data)]..sort();
+  }
+  return jsonEncode(snapshot);
+}
+
+/// Evaluates score and streak impact inside one read-only transaction.
+/// By default private and unclassified versions are hidden: the corrected
+/// version must be public, daily scores exclude hidden contributions, and a
+/// hidden streak date cuts off that date and all earlier history. Explicitly
+/// set [includePrivate] to reveal those versions and their contributions.
 class AnalyticsCorrectionImpactReader {
   const AnalyticsCorrectionImpactReader(this._db, this._clock);
 
@@ -247,8 +349,18 @@ class AnalyticsCorrectionImpactReader {
   final AppClock _clock;
 
   Future<AnalyticsCorrectionImpactPreview> previewImpact(
-    CounterTargetCorrectionProposal proposal,
-  ) => _db.transaction(() async {
+    CounterTargetCorrectionProposal proposal, {
+    bool includePrivate = false,
+  }) => _db.transaction(() async {
+    if (!includePrivate) {
+      final metadata = await HabitMetadataStore(_db)
+          .findForVersion(proposal.versionId);
+      if (metadata == null || metadata.isPrivate) {
+        throw StateError(
+          'Reveal private history before previewing this version',
+        );
+      }
+    }
     final preview = await CounterCorrectionPreviewer(
       _db,
       _clock,
@@ -259,10 +371,26 @@ class AnalyticsCorrectionImpactReader {
     final impactByDate = <LocalDate, CounterCorrectionOccurrenceImpact>{
       for (final occ in preview.affectedOccurrences) occ.date: occ,
     };
+    final recoveryTotals = <LocalDate, int>{};
+    final recoveryReader = CounterRecoveryReader(_db);
+    for (final occ in preview.affectedOccurrences) {
+      if (occ.recoveryCount > 0) {
+        final recoveries = await recoveryReader.findForOccurrence(
+          occ.occurrenceId,
+        );
+        recoveryTotals[occ.date] = recoveries.fold<int>(
+          0,
+          (sum, recovery) => sum + recovery.quantity,
+        );
+      }
+    }
 
     final dateScoreImpacts = <CorrectionDateScoreImpact>[];
     for (final occ in preview.affectedOccurrences) {
-      final dayEvals = await historyReader.readDay(date: occ.date);
+      final dayEvals = await historyReader.readDay(
+        date: occ.date,
+        filter: HabitAnalyticsFilter(includePrivate: includePrivate),
+      );
       final beforeSummary = DailyWeightedScoreCalculator.calculate(
         date: occ.date,
         evaluations: dayEvals,
@@ -270,7 +398,11 @@ class AnalyticsCorrectionImpactReader {
       final afterEvals = [
         for (final eval in dayEvals)
           if (eval.habitId == proposal.habitId)
-            _applyProposedOccurrenceImpact(eval, occ)
+            _applyProposedOccurrenceImpact(
+              eval,
+              occ,
+              recoveryTotals[occ.date] ?? 0,
+            )
           else
             eval,
       ];
@@ -295,25 +427,44 @@ class AnalyticsCorrectionImpactReader {
       startInclusive: earliest,
       endInclusive: asOfDate,
     );
+    var visibleStart = 0;
+    if (!includePrivate) {
+      for (var i = 0; i < beforeHabitEvals.length; i++) {
+        if (!beforeHabitEvals[i].hasMetadata || beforeHabitEvals[i].isPrivate) {
+          visibleStart = i + 1;
+        }
+      }
+    }
+    final visibleHabitEvals = beforeHabitEvals.skip(visibleStart).toList();
     final afterHabitEvals = [
-      for (final eval in beforeHabitEvals)
+      for (final eval in visibleHabitEvals)
         if (impactByDate.containsKey(eval.date))
-          _applyProposedOccurrenceImpact(eval, impactByDate[eval.date]!)
+          _applyProposedOccurrenceImpact(
+            eval,
+            impactByDate[eval.date]!,
+            recoveryTotals[eval.date] ?? 0,
+          )
         else
           eval,
     ];
-    final includeInStreak = beforeHabitEvals.isEmpty
+    final includeInStreak = visibleHabitEvals.isEmpty
         ? true
-        : beforeHabitEvals.last.includeInStreak;
+        : visibleHabitEvals.last.includeInStreak;
 
+    final snapshot = await _impactSnapshot(_db);
+    if (await CounterCorrectionPreviewer(_db, _clock).isStale(preview)) {
+      throw StateError(
+        'Correction preview became stale while calculating impact',
+      );
+    }
     return AnalyticsCorrectionImpactPreview(
-      preview: preview,
+      preview: _ImpactBoundCorrectionPreview(preview, _db, snapshot),
       dateScoreImpacts: dateScoreImpacts,
       beforeStreakWithRecovery: HabitStreakEvaluator.evaluate(
         habitId: proposal.habitId,
         habitName: preview.versionName,
         asOfDate: asOfDate,
-        chronologicalEvaluations: beforeHabitEvals,
+        chronologicalEvaluations: visibleHabitEvals,
         mode: StreakCompletionMode.completedAndRecovered,
         includeInStreak: includeInStreak,
       ),
@@ -329,7 +480,7 @@ class AnalyticsCorrectionImpactReader {
         habitId: proposal.habitId,
         habitName: preview.versionName,
         asOfDate: asOfDate,
-        chronologicalEvaluations: beforeHabitEvals,
+        chronologicalEvaluations: visibleHabitEvals,
         mode: StreakCompletionMode.completedOnly,
         includeInStreak: includeInStreak,
       ),
@@ -347,11 +498,19 @@ class AnalyticsCorrectionImpactReader {
   UnifiedHabitDayEvaluation _applyProposedOccurrenceImpact(
     UnifiedHabitDayEvaluation original,
     CounterCorrectionOccurrenceImpact impact,
+    int recoveredTotal,
   ) {
     final HabitAnalyticsStatus proposedStatus;
     if (original.status == HabitAnalyticsStatus.failed ||
-        original.status == HabitAnalyticsStatus.recovered ||
-        original.status == HabitAnalyticsStatus.excused) {
+        original.status == HabitAnalyticsStatus.recovered) {
+      proposedStatus =
+          impact.recordedTotal + recoveredTotal >= impact.proposedTarget
+          ? HabitAnalyticsStatus.recovered
+          : HabitAnalyticsStatus.failed;
+    } else if (original.status == HabitAnalyticsStatus.excused ||
+        original.status == HabitAnalyticsStatus.conflict ||
+        original.status == HabitAnalyticsStatus.unknown ||
+        original.status == HabitAnalyticsStatus.notApplicable) {
       proposedStatus = original.status;
     } else {
       proposedStatus = switch (impact.proposedProgressStatus) {
@@ -380,6 +539,8 @@ class AnalyticsCorrectionImpactReader {
       includeInStreak: original.includeInStreak,
       hasMetadata: original.hasMetadata,
       partialRatio: ratio,
+      normalizedScore: original.normalizedScore,
+      scoringUnavailable: original.scoringUnavailable,
       summaryText: original.summaryText,
       hasOccurrence: original.hasOccurrence,
     );

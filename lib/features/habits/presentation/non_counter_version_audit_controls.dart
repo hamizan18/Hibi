@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_clock.dart';
+import '../../../core/database/app_database.dart';
 import '../application/counter_habit_providers.dart';
+import '../data/habit_scoring_store.dart';
 import '../data/non_counter_version_service.dart';
 import '../data/unified_habit_registry.dart';
 import '../domain/avoidance_habit.dart';
 import '../domain/boolean_duration_habit.dart';
 import '../domain/checklist_habit.dart';
+import '../domain/dynamic_normalized_scoring.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import '../domain/measurement_time_range_habit.dart';
@@ -50,6 +53,7 @@ class _NonCounterVersionAndAuditControlsState
   final _rangeMax = TextEditingController(text: '2.0');
   final _unit = TextEditingController(text: 'units');
   final _timeOfDay = TextEditingController(text: '06:00');
+  final _tolerance = TextEditingController();
   final _intervalDays = TextEditingController(text: '2');
   final _monthDay = TextEditingController(text: '1');
   final _category = TextEditingController(text: 'Personal');
@@ -135,6 +139,7 @@ class _NonCounterVersionAndAuditControlsState
       _rangeMax,
       _unit,
       _timeOfDay,
+      _tolerance,
       _intervalDays,
       _monthDay,
       _category,
@@ -160,8 +165,12 @@ class _NonCounterVersionAndAuditControlsState
             habitId: widget.habit.habitId,
             asOfDate: widget.date,
           );
+      final scoring = bundle.allVersions.isEmpty
+          ? null
+          : await HabitScoringStore(ref.read(databaseProvider))
+                .findForVersion(bundle.allVersions.last.id);
       if (!mounted || generation != _generation) return;
-      _populateFromLatest(bundle);
+      _populateFromLatest(bundle, scoring);
       setState(() {
         _bundle = bundle;
         _loading = false;
@@ -176,10 +185,27 @@ class _NonCounterVersionAndAuditControlsState
     }
   }
 
-  void _populateFromLatest(NonCounterConfigurationAndAudit bundle) {
+  void _populateFromLatest(
+    NonCounterConfigurationAndAudit bundle,
+    HabitScoringConfig? scoring,
+  ) {
     _effectiveStart = _minAllowedStart(bundle);
     if (bundle.allVersions.isEmpty) return;
     final latest = bundle.allVersions.last;
+    _tolerance.clear();
+    if (scoring?.tolerance != null) {
+      if (latest.trackingType == HabitTrackingType.timeOfDay &&
+          scoring!.type == DynamicScoreType.timeOfDay) {
+        _tolerance.text = '${scoring.tolerance}';
+      } else if (latest.trackingType == HabitTrackingType.range &&
+          scoring!.type == DynamicScoreType.range &&
+          latest.rangeTarget != null) {
+        _tolerance.text = _formatScaled(
+          scoring.tolerance!,
+          latest.rangeTarget!.decimalPlaces,
+        );
+      }
+    }
     _name.text = latest.name;
 
     switch (latest.trackingType) {
@@ -481,6 +507,7 @@ class _NonCounterVersionAndAuditControlsState
             ),
             schedule: schedule,
             metadata: metadata,
+            scoring: const HabitScoringConfig.measurement(),
           );
         case HabitTrackingType.timeOfDay:
           final minutes = _parseTimeMinutes(_timeOfDay.text.trim());
@@ -488,6 +515,14 @@ class _NonCounterVersionAndAuditControlsState
             setState(() {
               _busy = false;
               _error = 'Enter time in HH:MM (00:00 to 23:59).';
+            });
+            return;
+          }
+          final tolerance = int.tryParse(_tolerance.text.trim());
+          if (tolerance == null || tolerance <= 0) {
+            setState(() {
+              _busy = false;
+              _error = 'Enter a positive whole number of tolerance minutes.';
             });
             return;
           }
@@ -503,6 +538,7 @@ class _NonCounterVersionAndAuditControlsState
             ),
             schedule: schedule,
             metadata: metadata,
+            scoring: HabitScoringConfig.timeOfDay(toleranceMinutes: tolerance),
           );
         case HabitTrackingType.range:
           final minParsed = _parseDecimal(_rangeMin.text.trim());
@@ -515,7 +551,15 @@ class _NonCounterVersionAndAuditControlsState
             });
             return;
           }
-          final places = max(minParsed.$2, maxParsed.$2);
+          final tolerance = _parseDecimal(_tolerance.text.trim());
+          if (tolerance == null || tolerance.$1 <= 0) {
+            setState(() {
+              _busy = false;
+              _error = 'Enter a positive score tolerance.';
+            });
+            return;
+          }
+          final places = max(max(minParsed.$2, maxParsed.$2), tolerance.$2);
           final minScaled = _rescale(minParsed.$1, minParsed.$2, places);
           final maxScaled = _rescale(maxParsed.$1, maxParsed.$2, places);
           if (minScaled > maxScaled) {
@@ -539,6 +583,9 @@ class _NonCounterVersionAndAuditControlsState
             ),
             schedule: schedule,
             metadata: metadata,
+            scoring: HabitScoringConfig.range(
+              toleranceScaled: _rescale(tolerance.$1, tolerance.$2, places),
+            ),
           );
         case HabitTrackingType.counter || HabitTrackingType.unconfigured:
           break;
@@ -761,6 +808,19 @@ class _NonCounterVersionAndAuditControlsState
             enabled: !_busy,
             decoration: const InputDecoration(labelText: 'Future target unit'),
           ),
+          DropdownButtonFormField<MeasurementComparisonRule>(
+            initialValue: _measurementRule,
+            decoration: const InputDecoration(labelText: 'Future comparison'),
+            items: MeasurementComparisonRule.values
+                .map(
+                  (rule) =>
+                      DropdownMenuItem(value: rule, child: Text(rule.name)),
+                )
+                .toList(),
+            onChanged: _busy
+                ? null
+                : (v) => setState(() => _measurementRule = v!),
+          ),
         ];
       case HabitTrackingType.timeOfDay:
         return [
@@ -769,6 +829,35 @@ class _NonCounterVersionAndAuditControlsState
             enabled: !_busy,
             decoration: const InputDecoration(
               labelText: 'Future target time (HH:MM)',
+            ),
+          ),
+          DropdownButtonFormField<TimeComparisonRule>(
+            initialValue: _timeRule,
+            decoration: const InputDecoration(labelText: 'Future comparison'),
+            items: const [
+              DropdownMenuItem(
+                value: TimeComparisonRule.atOrBefore,
+                child: Text('At or before'),
+              ),
+              DropdownMenuItem(
+                value: TimeComparisonRule.atOrAfter,
+                child: Text('At or after'),
+              ),
+              DropdownMenuItem(
+                value: TimeComparisonRule.atOrNear,
+                child: Text('At or near'),
+              ),
+            ],
+            onChanged: _busy ? null : (v) => setState(() => _timeRule = v!),
+          ),
+          if (_timeRule == TimeComparisonRule.atOrNear)
+            const Text('At or near completes only at the exact target minute.'),
+          TextField(
+            controller: _tolerance,
+            enabled: !_busy,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Future score tolerance (minutes)',
             ),
           ),
         ];
@@ -792,6 +881,14 @@ class _NonCounterVersionAndAuditControlsState
             controller: _unit,
             enabled: !_busy,
             decoration: const InputDecoration(labelText: 'Future target unit'),
+          ),
+          TextField(
+            controller: _tolerance,
+            enabled: !_busy,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Future score tolerance (target units)',
+            ),
           ),
         ];
       case HabitTrackingType.counter || HabitTrackingType.unconfigured:

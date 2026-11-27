@@ -4,9 +4,11 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/services/app_clock.dart';
+import '../domain/counter_day_status.dart';
 import '../domain/counter_progress.dart';
 import '../domain/counter_target.dart';
 import '../domain/habit_schedule.dart';
+import 'counter_day_reader.dart';
 
 /// Indicates whether a downstream derived-data engine exists for recalculation.
 enum CounterDerivedImpactAvailability { notImplemented }
@@ -100,6 +102,12 @@ class CounterCorrectionPreview {
   bool get isUnboundedEnd => effectiveEnd == null;
 }
 
+/// Additional read-set validation attached to a derived correction preview.
+/// Called inside the same transaction as the correction preview validation.
+abstract interface class CorrectionPreviewImpactBinding {
+  Future<bool> isImpactStale(AppDatabase database);
+}
+
 /// Generates a side-effect-free historical correction preview and checks
 /// whether a previously generated preview has become stale.
 class CounterCorrectionPreviewer {
@@ -119,6 +127,11 @@ class CounterCorrectionPreviewer {
           return true;
         }
         try {
+          if (existingPreview is CorrectionPreviewImpactBinding &&
+              await (existingPreview as CorrectionPreviewImpactBinding)
+                  .isImpactStale(_db)) {
+            return true;
+          }
           final current = await _buildPreview(existingPreview.proposal);
           return current.snapshotSignature != existingPreview.snapshotSignature;
         } on Object {
@@ -176,6 +189,10 @@ class CounterCorrectionPreviewer {
     final effectiveStart = _parseDate(startStr);
     final effectiveEnd = endStr == null ? null : _parseDate(endStr);
     final versionName = versionRow.read<String>('name');
+    final audits = await orderedCounterCorrectionAudits(
+      _db,
+      proposal.versionId,
+    );
 
     final scheduleRow = await _db
         .customSelect(
@@ -223,6 +240,13 @@ class CounterCorrectionPreviewer {
       final occId = occ.read<String>('id');
       final occDateStr = occ.read<String>('local_date');
       final occTarget = occ.read<int>('target_count');
+      final evaluation = await CounterDayReader(_db)
+          .evaluate(habitId: proposal.habitId, date: _parseDate(occDateStr));
+      if (evaluation.effectiveStatus == CounterDayEffectiveStatus.conflict) {
+        throw StateError(
+          'Occurrence $occId on $occDateStr has conflicting records',
+        );
+      }
       final occUnit = occ.read<String>('unit');
 
       final eventRows = await _db
@@ -266,11 +290,22 @@ class CounterCorrectionPreviewer {
                original_progress_total, remaining_deficit, note, occurred_at_utc_us
         FROM habit_counter_recoveries
         WHERE occurrence_id = ?
-        ORDER BY occurred_at_utc_us ASC, id ASC
+        ORDER BY occurred_at_utc_us ASC, rowid ASC
         ''',
             variables: [Variable<String>(occId)],
           )
           .get();
+      if (recRows.isNotEmpty) {
+        final order = <String, int>{
+          for (var i = 0; i < evaluation.day.recoveries.length; i++)
+            evaluation.day.recoveries[i].id: i,
+        };
+        recRows.sort(
+          (a, b) => order[a.read<String>('id')]!.compareTo(
+            order[b.read<String>('id')]!,
+          ),
+        );
+      }
 
       if (resRow != null) {
         if (proposedProgress.status == CounterProgressStatus.completed) {
@@ -351,6 +386,15 @@ class CounterCorrectionPreviewer {
     final snapshotSignature = jsonEncode({
       'preview_date': _dateKey(today),
       'habit_id': proposal.habitId,
+      'correction_audits': [
+        for (final audit in audits)
+          {
+            'id': audit.read<String>('id'),
+            'previous_target_count': audit.read<int>('previous_target_count'),
+            'updated_target_count': audit.read<int>('updated_target_count'),
+            'before_snapshot_json': audit.read<String>('before_snapshot_json'),
+          },
+      ],
       'version': {
         'id': versionRow.read<String>('id'),
         'name': versionName,

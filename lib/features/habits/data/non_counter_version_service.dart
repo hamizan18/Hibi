@@ -7,12 +7,14 @@ import '../../../core/services/app_clock.dart';
 import '../domain/avoidance_habit.dart';
 import '../domain/boolean_duration_habit.dart';
 import '../domain/checklist_habit.dart';
+import '../domain/dynamic_normalized_scoring.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import '../domain/measurement_time_range_habit.dart';
 import 'counter_audit_reader.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
+import 'habit_scoring_store.dart';
 import 'habit_schedule_store.dart';
 import 'unified_habit_registry.dart';
 
@@ -36,6 +38,7 @@ class NonCounterVersionSnapshot {
     this.measurementTarget,
     this.timeOfDayTarget,
     this.rangeTarget,
+    this.scoring,
   });
 
   final String id;
@@ -54,6 +57,7 @@ class NonCounterVersionSnapshot {
   final MeasurementTarget? measurementTarget;
   final TimeOfDayTarget? timeOfDayTarget;
   final RangeTarget? rangeTarget;
+  final HabitScoringConfig? scoring;
 
   bool isEffectiveOn(LocalDate date) {
     if (date.compareTo(effectiveStart) < 0) return false;
@@ -390,6 +394,7 @@ class NonCounterVersionService {
     required MeasurementTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     final ruleStr = switch (target.rule) {
       MeasurementComparisonRule.atLeast => 'at_least',
@@ -405,6 +410,7 @@ class NonCounterVersionService {
       expectedTrackingType: 'measurement',
       schedule: schedule,
       metadata: metadata,
+      scoring: scoring,
       writeTypedConfig: () async {
         await _db.customStatement(
           '''
@@ -433,10 +439,12 @@ class NonCounterVersionService {
     required TimeOfDayTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     final ruleStr = switch (target.rule) {
       TimeComparisonRule.atOrBefore => 'at_or_before',
       TimeComparisonRule.atOrAfter => 'at_or_after',
+      TimeComparisonRule.atOrNear => 'at_or_near',
     };
     await _scheduleNonCounterVersion(
       habitId: habitId,
@@ -447,6 +455,7 @@ class NonCounterVersionService {
       expectedTrackingType: 'time_of_day',
       schedule: schedule,
       metadata: metadata,
+      scoring: scoring,
       writeTypedConfig: () async {
         await _db.customStatement(
           '''
@@ -469,6 +478,7 @@ class NonCounterVersionService {
     required RangeTarget target,
     required HabitSchedule schedule,
     HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
   }) => _db.transaction(() async {
     await _scheduleNonCounterVersion(
       habitId: habitId,
@@ -479,6 +489,7 @@ class NonCounterVersionService {
       expectedTrackingType: 'range',
       schedule: schedule,
       metadata: metadata,
+      scoring: scoring,
       writeTypedConfig: () async {
         await _db.customStatement(
           '''
@@ -507,6 +518,7 @@ class NonCounterVersionService {
     required String expectedTrackingType,
     required HabitSchedule schedule,
     required HabitMetadata? metadata,
+    HabitScoringConfig? scoring,
     required Future<void> Function() writeTypedConfig,
   }) async {
     _requireId(habitId, 'habitId');
@@ -586,6 +598,18 @@ class NonCounterVersionService {
     );
 
     await writeTypedConfig();
+    if (scoring != null) {
+      final expected = switch (expectedTrackingType) {
+        'measurement' => DynamicScoreType.measurement,
+        'time_of_day' => DynamicScoreType.timeOfDay,
+        'range' => DynamicScoreType.range,
+        _ => throw ArgumentError('Scoring is not supported for this habit'),
+      };
+      if (scoring.type != expected) {
+        throw ArgumentError('Scoring type does not match habit type');
+      }
+      await HabitScoringStore(_db).insert(versionId, scoring);
+    }
     await HabitScheduleStore(_db).insert(versionId, schedule);
     if (metadata != null) {
       await HabitMetadataStore(_db).insert(versionId, metadata);
@@ -694,6 +718,12 @@ class NonCounterVersionService {
           variables: [Variable<String>(versionId)],
         )
         .getSingleOrNull();
+    final scoring = await _db
+        .customSelect(
+          'SELECT * FROM habit_version_scoring WHERE habit_version_id = ?',
+          variables: [Variable<String>(versionId)],
+        )
+        .getSingleOrNull();
     final targetSql = switch (trackingType) {
       'checklist' => null,
       'avoidance' =>
@@ -727,6 +757,7 @@ class NonCounterVersionService {
       'metadata': metadata?.data,
       'tracking_type': trackingType,
       'target': target?.data,
+      'scoring': scoring?.data,
       'items': [for (final item in items) item.data],
     };
   }
@@ -851,6 +882,7 @@ class NonCounterVersionService {
             trackingType: HabitTrackingType.measurement,
             schedule: schedule,
             metadata: metadata,
+            scoring: await HabitScoringStore(_db).findForVersion(versionId),
             measurementTarget: MeasurementTarget(
               scaledTarget: typedRow.read<int>('scaled_target'),
               decimalPlaces: typedRow.read<int>('decimal_places'),
@@ -874,13 +906,19 @@ class NonCounterVersionService {
             trackingType: HabitTrackingType.timeOfDay,
             schedule: schedule,
             metadata: metadata,
+            scoring: await HabitScoringStore(_db).findForVersion(versionId),
             timeOfDayTarget: TimeOfDayTarget(
               targetMinutesSinceMidnight: typedRow.read<int>(
                 'target_minutes_since_midnight',
               ),
-              rule: typedRow.read<String>('comparison_rule') == 'at_or_before'
-                  ? TimeComparisonRule.atOrBefore
-                  : TimeComparisonRule.atOrAfter,
+              rule: switch (typedRow.read<String>('comparison_rule')) {
+                'at_or_before' => TimeComparisonRule.atOrBefore,
+                'at_or_after' => TimeComparisonRule.atOrAfter,
+                'at_or_near' => TimeComparisonRule.atOrNear,
+                final rule => throw StateError(
+                  'Unknown time comparison rule: $rule',
+                ),
+              },
             ),
           );
         case 'range':
@@ -895,6 +933,7 @@ class NonCounterVersionService {
             trackingType: HabitTrackingType.range,
             schedule: schedule,
             metadata: metadata,
+            scoring: await HabitScoringStore(_db).findForVersion(versionId),
             rangeTarget: RangeTarget(
               minScaled: typedRow.read<int>('min_scaled'),
               maxScaled: typedRow.read<int>('max_scaled'),

@@ -5,12 +5,15 @@ import '../domain/avoidance_habit.dart';
 import '../domain/boolean_duration_habit.dart';
 import '../domain/checklist_habit.dart';
 import '../domain/counter_day_status.dart';
+import '../domain/dynamic_normalized_scoring.dart';
+import '../domain/measurement_time_range_habit.dart';
 import '../domain/habit_analytics.dart';
 import '../domain/habit_metadata.dart';
 import '../domain/habit_schedule.dart';
 import 'counter_day_reader.dart';
 import 'habit_lifecycle.dart';
 import 'habit_metadata_store.dart';
+import 'habit_scoring_store.dart';
 import 'unified_habit_registry.dart';
 
 /// Read-only multi-type habit history evaluator.
@@ -708,10 +711,38 @@ class UnifiedHabitHistoryReader {
         .getSingleOrNull();
     final occRow = await _db
         .customSelect(
-          'SELECT id, tracking_type FROM habit_typed_occurrences WHERE habit_id = ? AND local_date = ?',
+          'SELECT id, habit_version_id, tracking_type FROM habit_typed_occurrences WHERE habit_id = ? AND local_date = ?',
           variables: [Variable<String>(habitId), Variable<String>(dateKey)],
         )
         .getSingleOrNull();
+
+    final expectedType = switch (trackingType) {
+      HabitTrackingType.timeOfDay => 'time_of_day',
+      _ => trackingType.name,
+    };
+    if (occRow != null &&
+        (occRow.read<String>('habit_version_id') != versionId ||
+            occRow.read<String>('tracking_type') != expectedType)) {
+      return UnifiedHabitDayEvaluation(
+        habitId: habitId,
+        versionId: versionId,
+        name: name,
+        date: date,
+        trackingType: trackingType,
+        status: HabitAnalyticsStatus.conflict,
+        applicabilityReason: applicability.reason,
+        priority: priority,
+        category: category,
+        symbol: symbol,
+        isPrivate: isPrivate,
+        includeInScore: includeInScore,
+        includeInStreak: includeInStreak,
+        hasMetadata: hasMetadata,
+        partialRatio: 0,
+        summaryText: 'conflict',
+        hasOccurrence: true,
+      );
+    }
 
     if (applicability.applicability == HabitApplicability.notApplicable) {
       return UnifiedHabitDayEvaluation(
@@ -840,7 +871,7 @@ class UnifiedHabitHistoryReader {
 
     final logRow = await _db
         .customSelect(
-          'SELECT state FROM habit_typed_logs WHERE occurrence_id = ?',
+          'SELECT state, scaled_value, minutes_since_midnight, day_offset FROM habit_typed_logs WHERE occurrence_id = ?',
           variables: [Variable<String>(occId)],
         )
         .getSingleOrNull();
@@ -873,6 +904,76 @@ class UnifiedHabitHistoryReader {
       'excused' => HabitAnalyticsStatus.excused,
       _ => HabitAnalyticsStatus.unknown,
     };
+    final numeric =
+        trackingType == HabitTrackingType.measurement ||
+        trackingType == HabitTrackingType.timeOfDay ||
+        trackingType == HabitTrackingType.range;
+    double? normalizedScore;
+    if (numeric && status != HabitAnalyticsStatus.excused) {
+      final config = await HabitScoringStore(_db).findForVersion(versionId);
+      final scaled = logRow.readNullable<int>('scaled_value');
+      final minutes = logRow.readNullable<int>('minutes_since_midnight');
+      final offset = logRow.readNullable<int>('day_offset');
+      if (trackingType == HabitTrackingType.measurement &&
+          config?.type == DynamicScoreType.measurement &&
+          scaled != null) {
+        final rule = switch (targetRow.readNullable<String>(
+          'comparison_rule',
+        )) {
+          'at_least' => MeasurementComparisonRule.atLeast,
+          'at_most' => MeasurementComparisonRule.atMost,
+          'exact' => MeasurementComparisonRule.exact,
+          _ => null,
+        };
+        final target = targetRow.readNullable<int>('scaled_target');
+        if (rule != null && target != null) {
+          normalizedScore = DynamicNormalizedScoring.measurement(
+            actual: scaled,
+            target: target,
+            rule: rule,
+          );
+        }
+      } else if (trackingType == HabitTrackingType.timeOfDay &&
+          config?.type == DynamicScoreType.timeOfDay &&
+          minutes != null &&
+          offset != null &&
+          config?.tolerance != null) {
+        final rule = switch (targetRow.readNullable<String>(
+          'comparison_rule',
+        )) {
+          'at_or_before' => TimeComparisonRule.atOrBefore,
+          'at_or_after' => TimeComparisonRule.atOrAfter,
+          'at_or_near' => TimeComparisonRule.atOrNear,
+          _ => null,
+        };
+        final target = targetRow.readNullable<int>(
+          'target_minutes_since_midnight',
+        );
+        if (rule != null && target != null) {
+          normalizedScore = DynamicNormalizedScoring.timeOfDay(
+            actualMinutes: minutes,
+            targetMinutes: target,
+            rule: rule,
+            toleranceMinutes: config!.tolerance!,
+            dayOffset: offset,
+          );
+        }
+      } else if (trackingType == HabitTrackingType.range &&
+          config?.type == DynamicScoreType.range &&
+          scaled != null &&
+          config?.tolerance != null) {
+        final min = targetRow.readNullable<int>('min_scaled');
+        final max = targetRow.readNullable<int>('max_scaled');
+        if (min != null && max != null) {
+          normalizedScore = DynamicNormalizedScoring.range(
+            actual: scaled,
+            min: min,
+            max: max,
+            toleranceScaled: config!.tolerance!,
+          );
+        }
+      }
+    }
     return UnifiedHabitDayEvaluation(
       habitId: habitId,
       versionId: versionId,
@@ -889,6 +990,8 @@ class UnifiedHabitHistoryReader {
       includeInStreak: includeInStreak,
       hasMetadata: hasMetadata,
       partialRatio: status == HabitAnalyticsStatus.partial ? 0.5 : 0.0,
+      normalizedScore: normalizedScore,
+      scoringUnavailable: numeric && normalizedScore == null,
       summaryText: status.name,
       hasOccurrence: true,
     );

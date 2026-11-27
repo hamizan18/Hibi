@@ -2,7 +2,7 @@
 
 ## Current status
 
-Schema version 12 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
+Schema version 13 is defined in `lib/core/database/app_database.dart` using explicit Drift SQL. SQLite is not encrypted at rest.
 
 | Table | Column | SQLite type | Constraints |
 | --- | --- | --- | --- |
@@ -72,9 +72,14 @@ Schema version 12 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_avoidance_incidents` | `id` | TEXT | NOT NULL, PRIMARY KEY; multiple incident entries per avoidance occurrence |
 | `habit_avoidance_resolutions` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable `confirmed_completed`, `failed`, or `excused` decision |
 | `habit_typed_targets` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY; validated `boolean`, `duration`, `measurement`, `time_of_day`, or `range` target |
+| `habit_version_scoring` | `habit_version_id` | TEXT | NOT NULL, PRIMARY KEY, foreign key to `habit_versions(id)`, ON DELETE RESTRICT |
+| `habit_version_scoring` | `tracking_type` | TEXT | NOT NULL: `measurement`, `time_of_day`, or `range`; must match the typed target |
+| `habit_version_scoring` | `rule_version` | INTEGER | NOT NULL, positive; unsupported versions are read as unavailable |
+| `habit_version_scoring` | `tolerance` | INTEGER | NULL for measurement; positive minutes for time-of-day, or positive fixed-scale units for range |
 | `habit_typed_occurrences` | `id` | TEXT | NOT NULL, PRIMARY KEY; unique `(habit_id, local_date)` occurrence for typed habits |
 | `habit_duration_events` | `id` | TEXT | NOT NULL, PRIMARY KEY; positive integer `duration_seconds` (`manual` or `timer`) |
 | `habit_typed_logs` | `id` | TEXT | NOT NULL, PRIMARY KEY; immutable result log for boolean, duration, measurement, time_of_day, or range |
+| `habit_typed_logs` | `day_offset` | INTEGER | NULL for legacy/unavailable context; otherwise -1, 0, or 1 relative to the occurrence date |
 | `habit_lifecycle_events` | `id` | TEXT | NOT NULL, PRIMARY KEY, nonblank |
 | `habit_lifecycle_events` | `habit_id` | TEXT | NOT NULL, foreign key to `habits(id)`, ON DELETE RESTRICT |
 | `habit_lifecycle_events` | `effective_date` | TEXT | NOT NULL, valid ISO date; unique per habit |
@@ -86,6 +91,8 @@ Schema version 12 is defined in `lib/core/database/app_database.dart` using expl
 | `habit_lifecycle_start_pauses` | `initial_event_id` | TEXT | NOT NULL, UNIQUE, foreign key to `habit_lifecycle_events(id)`, ON DELETE RESTRICT |
 | `habit_lifecycle_start_pauses` | `created_at_utc_us` | INTEGER | NOT NULL; UTC Unix microseconds |
 | `habit_lifecycle_start_pauses` | `reason` | TEXT | NULL or user-provided reason |
+
+Schema v13 migrates typed targets transactionally to accept `at_or_near` and adds nullable `day_offset` to existing typed logs. No scoring configurations or offsets are inferred for old records. Configuration writes require a matching typed target; triggers block changes when a typed occurrence already references the version. Creation and future-version audit snapshots include the explicitly persisted scoring configuration. Historical scores without supported configuration are N/A, while raw records and stored completion statuses remain unchanged.
 
 New checklist, avoidance, boolean, duration, measurement, time-of-day and range creations append a `create` entry in the same transaction as their configuration. Its JSON `updated_values` contains the persisted `version`, `schedule`, optional `metadata`, `lifecycle`, `tracking_type`, optional `target` and ordered checklist `items`. The timestamp is the version's creation instant. Strictly future version scheduling for those seven non-counter types (`NonCounterVersionService`) closes the prior open version and appends a `schedule_version` entry in `habit_version_audit` capturing `previous_version`, `closed_previous_version` and `new_version` in one transaction. Existing records receive no invented audit entries; no schema migration is needed. Snapshots may contain private data and are not encrypted.
 

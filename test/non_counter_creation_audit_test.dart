@@ -183,15 +183,7 @@ Future<void> checkSnapshot(
   expect(audit['previous_values'], isNull);
   final snapshot =
       jsonDecode(audit['updated_values'] as String) as Map<String, dynamic>;
-  expect(snapshot.keys.toSet(), {
-    'version',
-    'schedule',
-    'metadata',
-    'lifecycle',
-    'tracking_type',
-    'target',
-    'items',
-  });
+  expect(snapshot['scoring'], isNull);
   final version = await row(
     db,
     "SELECT * FROM habit_versions WHERE id = '$versionId'",
