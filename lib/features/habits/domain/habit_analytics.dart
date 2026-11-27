@@ -692,7 +692,9 @@ class AnalyticsPeriodReportCalculator {
           : HeatmapIntensity.noData;
     }
     final score = summary.weightedScorePercent!;
-    if (score >= 100.0 && !summary.isIncompleteRecording) {
+    if (score >= 100.0 &&
+        !summary.isIncompleteRecording &&
+        summary.unavailableRecordedScoreCount == 0) {
       return HeatmapIntensity.full;
     }
     if (score >= 75.0) return HeatmapIntensity.high;

@@ -238,14 +238,21 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             DropdownButtonFormField<String?>(
               key: ValueKey(('category', validCategory)),
               initialValue: validCategory,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Filter category'),
               items: [
                 const DropdownMenuItem(
                   value: null,
-                  child: Text('All categories'),
+                  child: Text(
+                    'All categories',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 for (final c in categories)
-                  DropdownMenuItem(value: c, child: Text(c)),
+                  DropdownMenuItem(
+                    value: c,
+                    child: Text(c, overflow: TextOverflow.ellipsis),
+                  ),
               ],
               onChanged: (v) {
                 _selectedCategory = v;
@@ -254,18 +261,25 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             ),
             DropdownButtonFormField<HabitTrackingType?>(
               initialValue: _selectedType,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Filter tracking type',
               ),
               items: [
                 const DropdownMenuItem(
                   value: null,
-                  child: Text('All tracking types'),
+                  child: Text(
+                    'All tracking types',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 for (final t in HabitTrackingType.values.where(
                   (e) => e != HabitTrackingType.unconfigured,
                 ))
-                  DropdownMenuItem(value: t, child: Text(t.name)),
+                  DropdownMenuItem(
+                    value: t,
+                    child: Text(t.name, overflow: TextOverflow.ellipsis),
+                  ),
               ],
               onChanged: (v) {
                 _selectedType = v;
@@ -275,13 +289,20 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             DropdownButtonFormField<String?>(
               key: ValueKey(('habit', validHabit)),
               initialValue: validHabit,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Filter habit'),
               items: [
-                const DropdownMenuItem(value: null, child: Text('All habits')),
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('All habits', overflow: TextOverflow.ellipsis),
+                ),
                 for (final h in habits)
                   DropdownMenuItem(
                     value: h.habitId,
-                    child: Text(h.name ?? h.habitId),
+                    child: Text(
+                      h.name ?? h.habitId,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
               ],
               onChanged: (v) {
@@ -291,15 +312,22 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             ),
             DropdownButtonFormField<StreakCompletionMode>(
               initialValue: _streakMode,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Streak mode'),
               items: const [
                 DropdownMenuItem(
                   value: StreakCompletionMode.completedAndRecovered,
-                  child: Text('Completed + Recovered'),
+                  child: Text(
+                    'Completed + Recovered',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 DropdownMenuItem(
                   value: StreakCompletionMode.completedOnly,
-                  child: Text('Completed only'),
+                  child: Text(
+                    'Completed only',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
               onChanged: (v) {
@@ -362,23 +390,35 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
     final scoreLabel = s.availability == ScoreAvailability.noData
         ? 'N/A'
         : '${s.weightedScorePercent!.toStringAsFixed(0)}%';
-    final incompleteTag = s.isIncompleteRecording ? ' (partial log)' : '';
+    final incompleteTag = s.isIncompleteRecording
+        ? ' (partial log)'
+        : s.unavailableRecordedScoreCount > 0
+        ? ' (partial score)'
+        : '';
 
-    return OutlinedButton(
-      key: Key('heatmap-cell-$dateStr'),
-      style: OutlinedButton.styleFrom(
-        side: isSelected
-            ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2)
-            : null,
-      ),
-      onPressed: () => setState(() => _selectedDate = cell.date),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(shortDate),
-          Text('$scoreLabel$incompleteTag'),
-          Text('intensity: ${cell.intensity.name}'),
-        ],
+    return Semantics(
+      selected: isSelected,
+      label:
+          '$dateStr, score $scoreLabel$incompleteTag, intensity ${cell.intensity.name}',
+      child: OutlinedButton(
+        key: Key('heatmap-cell-$dateStr'),
+        style: OutlinedButton.styleFrom(
+          side: isSelected
+              ? BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+              : null,
+        ),
+        onPressed: () => setState(() => _selectedDate = cell.date),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(shortDate),
+            Text('$scoreLabel$incompleteTag'),
+            Text('intensity: ${cell.intensity.name}'),
+          ],
+        ),
       ),
     );
   }

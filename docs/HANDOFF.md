@@ -2,13 +2,19 @@
 
 ## Current state
 
-**Validation update:** Milestone 2 remains under validation and is not accepted. Earlier host acceptance wording below predates the review findings documented in this handoff.
+**Final Milestone 2 Audit completed; awaiting explicit owner acceptance.**
 
-Milestone 0 is accepted. Milestone 1 habit functionality has host-side regression and isolated database coverage plus a debug APK build; Android device migration for the current app remains unverified. Milestone 2 History, Analytics and Dynamic Normalized Scoring are implemented and host-tested, but the owner explicitly has **not accepted Milestone 2**. Do not start Milestone 3.
+Milestone 0 is accepted. Milestone 1 habit functionality and Milestone 2 History, Analytics and Dynamic Normalized Scoring have completed the Final Milestone 2 Audit & Verification on the host (all 267 automated tests passing + Android debug APK built), while Android on-device visual/migration/timezone checks remain unavailable because no Android device or emulator was attached. **Milestone 2 is still awaiting explicit owner acceptance; do not start Milestone 3 without it.**
 
 ## Latest work
 
-Completed 15 bounded tasks for Milestone 2 (ADR-056 through ADR-070): added `lib/features/habits/domain/habit_analytics.dart`, `lib/features/habits/data/unified_habit_history_reader.dart`, `lib/features/habits/data/habit_analytics_reader.dart`, and `lib/features/habits/presentation/history_analytics_screen.dart`; added value equality (`operator ==` and `hashCode`) to `LocalDate` in `lib/features/habits/domain/habit_schedule.dart`; wired Milestone 2 providers in `lib/features/habits/application/counter_habit_providers.dart`; integrated before/after score and streak recalculation previews into `lib/features/habits/presentation/counter_correction_controls.dart`; activated the History destination in `lib/app/app.dart`; and added `test/habit_analytics_domain_test.dart`, `test/unified_habit_history_reader_test.dart`, `test/history_analytics_screen_test.dart` and `test/milestone2_acceptance_test.dart`. Updated ARCHITECTURE, BUSINESS_RULES, DECISIONS, PROJECT_SPEC, ROADMAP, PROGRESS and HANDOFF.
+Performed the complete Final Milestone 2 Audit & Verification checklist (ADR-071) starting from clean commit `b1e3207`:
+- Audited Dynamic Normalized Scoring formulas, signed 64-bit / zero / negative / exact boundaries, circular `atOrNear` distance, `day_offset` handling, schema v13 migrations (`habit_version_scoring`, `habit_typed_logs.day_offset`, `habit_typed_targets` `'at_or_near'`), History privacy/filter/streak behavior, correction preview staleness, unlinked legacy counter-correction audit conflicts, and accessibility.
+- Fixed two reproducible audit findings:
+  1. `AnalyticsPeriodReportCalculator.classifyIntensity` (`lib/features/habits/domain/habit_analytics.dart`) now requires `unavailableRecordedScoreCount == 0` for `HeatmapIntensity.full`, and `HistoryAnalyticsView` (`lib/features/habits/presentation/history_analytics_screen.dart`) shows `(partial score)` on heatmap cells with excluded N/A scores.
+  2. Added `isExpanded: true` + `TextOverflow.ellipsis` on all four History filter dropdowns and explicit `Semantics(selected: ..., label: ...)` wrappers on heatmap cells in `HistoryAnalyticsView`.
+- Added `test/milestone2_final_audit_test.dart` verifying representative multi-type v12→v13 disk migration + reopen, partial-score heatmap classification, and 320px/2.0x text-scaling accessibility.
+- Updated `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (ADR-071), `docs/PROGRESS.md` and `docs/HANDOFF.md`.
 
 ## Decisions and constraints
 
@@ -32,9 +38,13 @@ Latest stabilization verification: `cmd.exe /c "dart.bat format lib/features/hab
 
 Dynamic scoring verification: `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && flutter.bat build apk --debug"` passed formatting, analysis, all 264 tests and debug APK build. A subsequently added score-coverage widget test passed with `cmd.exe /c "dart.bat format test/dynamic_scoring_screen_test.dart && flutter.bat test test/dynamic_scoring_screen_test.dart"`. Initial failures and fixes are recorded in PROGRESS.md. Android visual and migration checks remain outstanding.
 
+Final Milestone 2 Audit verification (2026-11-27):
+- `cmd.exe /c "dart.bat format . && dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test && flutter.bat build apk --debug"`: exited 0; 151 files formatted (0 changed), `flutter.bat analyze` found no issues (12.2s), **all 267 tests passed** (00:54), and `flutter.bat build apk --debug` built `build\app\outputs\flutter-apk\app-debug.apk` (35.5s; Gradle emitted Java native-access warning).
+- `cmd.exe /c "flutter.bat devices & adb devices -l & flutter.bat emulators"`: exited 1; Flutter listed Windows, Chrome and Edge only, `adb devices -l` was empty, and emulator discovery found no emulator sources. Android on-device visual, migration, timezone and restart verification remains unavailable/unverified.
+
 ## Next bounded task
 
-The owner explicitly declined Milestone 2 acceptance and prohibited starting Milestone 3. Next session: perform only the Final Milestone 2 Audit & Verification checklist below, preserve the entire uncommitted working tree, and ask for explicit owner acceptance after reporting actual results.
+Await explicit owner acceptance of Milestone 2 (History, Analytics and Dynamic Normalized Scoring). Once the owner explicitly approves Milestone 2 acceptance, begin Milestone 3 — Finance (starting with integer IDR wallet schema, opening balances and transactional wallet store following BUSINESS_RULES.md). Do not commit, push or start Milestone 3 without explicit owner approval.
 
 ## Session handoff — owner-directed pause
 
