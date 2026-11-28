@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -248,36 +249,25 @@ class ExportService {
     );
   }
 
-  /// Generates a real PDF report (unencrypted, private records excluded by default).
-  ///
-  /// When [unicodeFont] (e.g. a bundled Noto Sans JP TTF) is supplied, full
-  /// Japanese date glyphs (`YYYY年MM月DD日(曜)`) and Unicode titles are rendered
-  /// natively; otherwise falls back cleanly to ASCII-safe text on built-in
-  /// Helvetica so missing-glyph exceptions never occur.
+  /// Generates an unencrypted PDF with the bundled Japanese font.
+  /// Private records are excluded by default.
   Future<Uint8List> exportPdfBytes({
     required LocalDate asOfDate,
     bool includePrivate = false,
-    pw.Font? unicodeFont,
-    pw.Font? unicodeBoldFont,
   }) async {
     final data = await _collectExportData(
       asOfDate: asOfDate,
       includePrivate: includePrivate,
     );
 
-    final theme = unicodeFont == null
-        ? null
-        : pw.ThemeData.withFont(
-            base: unicodeFont,
-            bold: unicodeBoldFont ?? unicodeFont,
-          );
-    String safe(String raw) => unicodeFont != null ? raw : _pdfSafeText(raw);
-    final headerDate = unicodeFont != null
-        ? japaneseDate(DateTime(asOfDate.year, asOfDate.month, asOfDate.day))
-        : _dateKey(asOfDate);
-    final headerTitle = unicodeFont != null
-        ? 'Hibi (日々) Personal Summary ($headerDate)'
-        : 'Hibi Personal Summary ($headerDate)';
+    final font = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/NotoSansJP.ttf'),
+    );
+    final theme = pw.ThemeData.withFont(base: font, bold: font);
+    final headerDate = japaneseDate(
+      DateTime(asOfDate.year, asOfDate.month, asOfDate.day),
+    );
+    final headerTitle = 'Hibi (日々) Personal Summary ($headerDate)';
 
     final doc = pw.Document(
       title: 'Hibi Report ${_dateKey(asOfDate)}',
@@ -305,7 +295,7 @@ class ExportService {
             for (final h in data.habits)
               pw.Bullet(
                 text:
-                    '${safe(h.name ?? h.habitId)} [${h.trackingType.name}] - ${h.applicability.applicability.name}',
+                    '${h.name ?? h.habitId} [${h.trackingType.name}] - ${h.applicability.applicability.name}',
               ),
           pw.SizedBox(height: 12),
           pw.Header(level: 1, child: pw.Text('Finance (IDR)')),
@@ -331,7 +321,7 @@ class ExportService {
           for (final g in data.goals)
             pw.Bullet(
               text:
-                  '${safe(g.goal.title)} (${g.goal.status.label}) - '
+                  '${g.goal.title} (${g.goal.status.label}) - '
                   'Progress: ${g.totalUnits} units, Milestones: ${g.completedMilestones}/${g.totalMilestones}',
             ),
         ],
@@ -442,10 +432,6 @@ String _csvEscape(String raw) {
   }
   return raw;
 }
-
-/// Replaces characters outside standard WinAnsi/Latin-1 PDF Helvetica range so
-/// built-in PDF rendering never throws a missing-glyph error.
-String _pdfSafeText(String raw) => raw.replaceAll(RegExp(r'[^\x20-\x7E]'), '?');
 
 String _dateKey(LocalDate date) =>
     '${date.year.toString().padLeft(4, '0')}-'

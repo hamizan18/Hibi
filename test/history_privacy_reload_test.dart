@@ -152,7 +152,7 @@ void main() {
       true,
       false,
     ]);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Loading history…'), findsOneWidget);
     expect(find.textContaining('Secret Habit'), findsNothing);
     expect(find.textContaining('Secret Category'), findsNothing);
     expect(find.text('Habit recording coverage: 0/2 (0.0%)'), findsNothing);
@@ -163,7 +163,7 @@ void main() {
     // An older private request completing out of order must not restore it.
     reader.privateReload.complete(private30);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Loading history…'), findsOneWidget);
     expect(find.textContaining('Secret Habit'), findsNothing);
     expect(find.textContaining('Secret Category'), findsNothing);
 

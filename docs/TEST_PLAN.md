@@ -23,6 +23,13 @@ Before marking a milestone complete, run relevant `dart format .`, `flutter anal
 
 For Android process-restart persistence verification, use a separate test application ID and private storage, not the user's `com.example.hibi` database. The test should use the real `AppDatabase.open()` path, write a known marker and process ID, stop its process, relaunch, and verify both the marker and a different process ID. Remove only the test application and its own data afterwards. A database file's existence alone does not establish that a written value survived. Record the device, commands, outcomes and any limitations in PROGRESS.md.
 
+## Milestone 7 PDF verification
+
+`test/pdf_japanese_export_test.dart` checks extracted Unicode mappings and page text for the Japanese date, a public habit and a public goal, plus exclusion and explicit inclusion of a private goal. Supplement this with an independent PDF reader and visual inspection: an exception-free PDF or a font mapping alone does not prove the glyphs render correctly. Retain private-by-default export behavior and the unencrypted-file warning.
+
+The isolated Android 16 probe generated PDFs using `ExportService` and the bundled font; independent PyMuPDF extraction and host-side visual inspection passed for the fixture described in PROGRESS.md. The five-tab Android integration test also passed in the isolated app with injected gateways. These results do not establish on-device biometric or notification delivery behavior.
+
+
 ## Milestone 2 validation gaps
 
 - Android visual checks, Android database migration and current-milestone Android restart verification remain outstanding. There is no `integration_test/` suite. Use a separate test application ID and isolated storage for migration probes; never clear or uninstall the user's app to test migration.

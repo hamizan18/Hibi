@@ -365,11 +365,9 @@ class _PrivacyRemindersDataViewState
   @override
   Widget build(BuildContext context) {
     if (_loading && _snapshot == null) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: CircularProgressIndicator(),
-        ),
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text('Loading settings…'),
       );
     }
     if (_error != null) {

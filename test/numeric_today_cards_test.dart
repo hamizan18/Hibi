@@ -51,7 +51,7 @@ Future<void> showHabit(
 
 Future<void> enterAndSubmit(WidgetTester tester, String text) async {
   await tester.enterText(find.byType(TextField), text);
-  await tester.tap(find.text('Log today'));
+  await tester.tap(find.text('Save for today'));
   await tester.pumpAndSettle();
 }
 
@@ -92,7 +92,7 @@ void main() {
       await enterAndSubmit(tester, '2.75');
       expect(changes, 1);
       expect(find.text('Completed · 2.75 L'), findsOneWidget);
-      expect(find.text('Log today'), findsNothing);
+      expect(find.text('Save for today'), findsNothing);
       expect(
         (await db
                 .customSelect('SELECT scaled_value FROM habit_typed_logs')

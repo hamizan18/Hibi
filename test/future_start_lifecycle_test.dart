@@ -65,7 +65,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Future public'), findsOneWidget);
       expect(find.text('Future secret'), findsNothing);
-      expect(find.textContaining('Not started yet.'), findsOneWidget);
+      expect(
+        find.textContaining('This habit has not started yet.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Habit options'));
+      await tester.pumpAndSettle();
       expect(find.text('Current: not yet started'), findsOneWidget);
       expect(find.text('Add progress'), findsNothing);
       await tester.ensureVisible(find.text('Effective date: 2026-11-26'));
@@ -111,10 +116,8 @@ void main() {
           0,
         );
       }
-      await tester.ensureVisible(
-        find.text('Show private or unclassified habits'),
-      );
-      await tester.tap(find.text('Show private or unclassified habits'));
+      await tester.ensureVisible(find.text('Show private habits'));
+      await tester.tap(find.text('Show private habits'));
       await tester.pumpAndSettle();
       expect(find.text('Future secret'), findsOneWidget);
     },

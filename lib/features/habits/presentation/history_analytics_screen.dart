@@ -135,7 +135,10 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done &&
             !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text('Loading history…'),
+          );
         }
         if (snapshot.hasError) {
           return Column(
@@ -147,7 +150,10 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text('Loading history…'),
+          );
         }
         final data = snapshot.data!;
         final report = data.report;
@@ -360,16 +366,33 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Tap any date to inspect its weighted score, recording coverage and habit statuses.',
+              'Tap a date to see its score and habit details. N/A means there is no score.',
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final cell in report.dailyCells)
-                  _buildHeatmapTile(context, cell, selectedCell.date),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final scale = MediaQuery.textScalerOf(context).scale(1);
+                final columns = ((constraints.maxWidth + 8) / (96 * scale + 8))
+                    .floor()
+                    .clamp(1, 31);
+                final tileWidth =
+                    (constraints.maxWidth - (columns - 1) * 8) / columns;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final cell in report.dailyCells)
+                      SizedBox(
+                        width: tileWidth,
+                        child: _buildHeatmapTile(
+                          context,
+                          cell,
+                          selectedCell.date,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -395,14 +418,32 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
         : s.unavailableRecordedScoreCount > 0
         ? ' (partial score)'
         : '';
-
+    final colors = Theme.of(context).colorScheme;
+    final intensityOpacity = switch (cell.intensity) {
+      HeatmapIntensity.noData => 0.0,
+      HeatmapIntensity.pendingOnly => 0.05,
+      HeatmapIntensity.low => 0.08,
+      HeatmapIntensity.medium => 0.14,
+      HeatmapIntensity.high => 0.21,
+      HeatmapIntensity.full => 0.28,
+    };
+    final intensityLabel = switch (cell.intensity) {
+      HeatmapIntensity.noData => 'No data',
+      HeatmapIntensity.pendingOnly => 'Pending',
+      HeatmapIntensity.low => 'Low',
+      HeatmapIntensity.medium => 'Medium',
+      HeatmapIntensity.high => 'High',
+      HeatmapIntensity.full => 'Full',
+    };
     return Semantics(
       selected: isSelected,
       label:
-          '$dateStr, score $scoreLabel$incompleteTag, intensity ${cell.intensity.name}',
+          '$dateStr, score $scoreLabel$incompleteTag, intensity $intensityLabel',
       child: OutlinedButton(
         key: Key('heatmap-cell-$dateStr'),
         style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          backgroundColor: colors.primary.withValues(alpha: intensityOpacity),
           side: isSelected
               ? BorderSide(
                   color: Theme.of(context).colorScheme.primary,
@@ -414,9 +455,19 @@ class _HistoryAnalyticsViewState extends ConsumerState<HistoryAnalyticsView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(shortDate),
-            Text('$scoreLabel$incompleteTag'),
-            Text('intensity: ${cell.intensity.name}'),
+            Text(shortDate, textAlign: TextAlign.center),
+            Text(scoreLabel, textAlign: TextAlign.center),
+            if (incompleteTag.isNotEmpty)
+              Text(
+                incompleteTag.trim(),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            Text(
+              intensityLabel,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),

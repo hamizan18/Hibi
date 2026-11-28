@@ -67,7 +67,7 @@ void main() {
             .read<int>('n'),
         0,
       );
-      await tester.tap(find.text('Show private or unclassified habits'));
+      await tester.tap(find.text('Show private habits'));
       await tester.pumpAndSettle();
       expect(find.text('Sensitive name'), findsOneWidget);
       expect(
@@ -106,11 +106,11 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Legacy'), findsNothing);
-      await tester.tap(find.text('Show private or unclassified habits'));
+      await tester.tap(find.text('Show private habits'));
       await tester.pumpAndSettle();
       expect(find.text('Legacy'), findsOneWidget);
       expect(
-        find.text('Status unknown: configuration is incomplete.'),
+        find.text('Finish setting up this habit to see its status.'),
         findsOneWidget,
       );
       expect(
@@ -167,11 +167,9 @@ void main() {
     await tester.ensureVisible(find.text('Start timer'));
     await tester.tap(find.text('Start timer'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(
-      find.widgetWithText(TextField, 'Progress amount'),
-    );
+    await tester.ensureVisible(find.widgetWithText(TextField, 'Amount to add'));
     await tester.enterText(
-      find.widgetWithText(TextField, 'Progress amount'),
+      find.widgetWithText(TextField, 'Amount to add'),
       '1',
     );
     await tester.ensureVisible(find.text('Add progress'));

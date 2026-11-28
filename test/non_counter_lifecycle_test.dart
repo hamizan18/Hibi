@@ -67,10 +67,12 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Habit options'));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Pause'));
       await tester.tap(find.text('Pause'));
       await tester.pumpAndSettle();
-      expect(find.text('Not scheduled or not active today.'), findsOneWidget);
+      expect(find.text('Not scheduled or active today.'), findsOneWidget);
       expect(
         (await HabitLifecycleReader(db).readHistory('h')).last.state,
         HabitLifecycleState.paused,

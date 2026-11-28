@@ -139,10 +139,11 @@ class _BooleanTodayCardState extends ConsumerState<BooleanTodayCard> {
         if (_loading)
           const CircularProgressIndicator()
         else
-          Text(_state == null ? 'Pending' : 'Status: ${_state!.name}'),
+          Text(_state == null ? 'Not recorded yet' : 'Status: ${_state!.name}'),
         if (_error != null) ...[
           Text(_error!),
-          if (!_busy) TextButton(onPressed: _load, child: const Text('Retry')),
+          if (!_busy)
+            TextButton(onPressed: _load, child: const Text('Try again')),
         ],
         Wrap(
           spacing: 8,
@@ -151,9 +152,9 @@ class _BooleanTodayCardState extends ConsumerState<BooleanTodayCard> {
               OutlinedButton(
                 onPressed: enabled ? () => _log(state) : null,
                 child: Text(switch (state) {
-                  BooleanLogState.completed => 'Complete',
-                  BooleanLogState.failed => 'Fail',
-                  BooleanLogState.excused => 'Excuse',
+                  BooleanLogState.completed => 'Mark done',
+                  BooleanLogState.failed => 'Mark not done',
+                  BooleanLogState.excused => 'Excuse today',
                 }),
               ),
           ],
@@ -340,14 +341,14 @@ class _DurationTodayCardState extends ConsumerState<DurationTodayCard> {
         if (_loading)
           const CircularProgressIndicator()
         else if (_progress == null)
-          const Text('Progress unknown')
+          const Text('Could not load progress')
         else
           Text(
             '${_progress!.status.name}: ${_progress!.totalSeconds} / ${_progress!.targetSeconds} seconds',
           ),
         if (_error != null) Text(_error!),
         if (!_loading && _progress == null)
-          TextButton(onPressed: _load, child: const Text('Retry')),
+          TextButton(onPressed: _load, child: const Text('Try again')),
         TextField(
           controller: _seconds,
           enabled: enabled,
@@ -359,7 +360,7 @@ class _DurationTodayCardState extends ConsumerState<DurationTodayCard> {
           children: [
             OutlinedButton(
               onPressed: enabled ? _manual : null,
-              child: const Text('Add duration'),
+              child: const Text('Add time'),
             ),
             OutlinedButton(
               onPressed: enabled ? _timer : null,
@@ -381,7 +382,7 @@ class _DurationTodayCardState extends ConsumerState<DurationTodayCard> {
         ),
         if (_startedAt != null)
           Text(
-            'Timer started at ${_startedAt!.toLocal()}. Leaving or refreshing Today, backgrounding the app, or changing private visibility can discard it. Timers cannot cross midnight.',
+            'Timer started at ${_startedAt!.toLocal()}. Leaving or refreshing Today, putting the app in the background, or changing private visibility can discard it. Timers cannot cross midnight.',
           ),
       ],
     );

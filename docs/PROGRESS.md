@@ -2,7 +2,73 @@
 
 ## Active milestone
 
-Milestone 0 through Milestone 6 are accepted by the owner. **Milestone 7 (Finalization)** is implemented and verified on host (`dart format`, `flutter analyze`, 313 passing tests covering `T-001` through `T-013` plus offline performance benchmark, `integration_test/app_test.dart`, Android debug APK, and Android release APK `63.4 MB`), awaiting explicit final owner acceptance. Do not commit, push, publish or release without explicit owner permission.
+Milestone 0 through Milestone 6 are accepted by the owner. **Milestone 7 (Finalization)** remains active pending owner acceptance. The Japanese PDF and five-tab navigation were tested on Android in an isolated application; production app installation was not changed. Do not commit, push, publish or release without explicit owner permission.
+
+### Navigation and builder refresh — 2026-11-28
+
+- Replaced the tab route animation with `NoTransitionPage`, keeping tab contents freshly loaded from local storage rather than caching potentially stale or private records. The initial data read can still take time; tab loading uses a small text message instead of a central spinner, and errors remain visible.
+- Refreshed the shared theme, Today empty/privacy cards and section headers. Reorganized Habit Builder into labeled, rounded sections with explanations and responsive dropdowns; original habit types, validation, privacy and writes remain in place.
+- An isolated host builder preview at 390×844 was visually inspected using a system font. The initial preview exposed `ListTile` ink-visibility assertions in the section container; changed the section to `Material`. The preview process timed out once and the retry was stopped after the screenshot; the temporary test and image were removed. It was not an Android-device visual test.
+- First verification: formatting processed 9 Dart files (1 changed), and `flutter.bat analyze --no-pub` reported no issues. The targeted test run had 27 passing and 3 failing tests: two attempted to tap the now-offscreen tracking dropdown without scrolling, and one expected the previous spinner. The tests were updated to scroll and to check the new loading text while retaining the privacy assertions.
+- `dart.bat format test/dynamic_scoring_forms_test.dart test/history_privacy_reload_test.dart`: 2 files unchanged. With `TEMP`/`TMP` on `D:\hibi_ui_temp`, `flutter.bat test --no-pub -j 2 test/foundation_test.dart test/habit_builder_screen_test.dart test/dynamic_scoring_forms_test.dart test/today_habit_roster_test.dart test/history_analytics_screen_test.dart test/history_privacy_reload_test.dart test/history_heatmap_layout_test.dart test/finance_screen_test.dart test/growth_screen_test.dart test/milestone7_finalization_test.dart` passed all 30 tests.
+- `cmd.exe /c "set TEMP=D:\hibi_ui_temp&& set TMP=D:\hibi_ui_temp&& flutter.bat build apk --debug --no-pub"`: built `build/app/outputs/flutter-apk/app-debug.apk`; Gradle reported a Java native-access warning. No APK was installed and no device data was touched.
+
+### UI refresh — 2026-11-28
+
+- Refreshed the shared dark theme and section introductions, moved habit creation ahead of the Today list, grouped secondary habit controls under `Habit options`, and simplified selected everyday labels without changing stored data or business rules.
+- Redesigned the History heatmap as responsive selectable date tiles, with readable score labels and an explanation of N/A. Added a narrow-screen, 2x text-scale widget regression test.
+- Replaced the Android launcher assets with an original sprout and rising-sun icon, including adaptive and density-specific resources. No production app installation or user-data changes were performed.
+- First verification: `dart.bat format` on nine changed Dart files completed (four changed); `flutter.bat analyze` reported no issues. The subsequent combined widget run timed out at 600 seconds because the temporary preview stalled; it also reported failures from changed Today labels before completion. This was not a passing test run. The temporary preview and affected behavioral test selectors were corrected for a retry.
+- An overlapping retry failed because Flutter could not delete `build/native_assets/windows/sqlite3.dll` while the preview process was running. After stopping that disposable preview, `flutter.bat test --no-pub -j 2 test/history_heatmap_layout_test.dart test/history_analytics_screen_test.dart test/history_privacy_reload_test.dart test/today_habit_roster_test.dart test/future_start_lifecycle_test.dart test/counter_today_card_test.dart test/boolean_duration_today_cards_test.dart test/checklist_avoidance_today_cards_test.dart test/numeric_today_cards_test.dart test/foundation_test.dart test/milestone7_finalization_test.dart` passed all 33 tests with `TEMP`/`TMP` set to `D:\hibi_ui_temp`.
+- A disposable widget preview produced a Today image, inspected for layout only; Flutter's test font renders text as blocks, so it is not a faithful visual or typography check. History and the launcher icon have not been visually verified on a device. The preview test was removed.
+- `dart.bat format test/today_habit_roster_test.dart test/future_start_lifecycle_test.dart test/counter_today_card_test.dart test/boolean_duration_today_cards_test.dart test/checklist_avoidance_today_cards_test.dart test/numeric_today_cards_test.dart`: 6 files processed, 2 formatted.
+- `cmd.exe /c "set TEMP=D:\hibi_ui_temp&& set TMP=D:\hibi_ui_temp&& flutter.bat build apk --debug --no-pub"`: built `build/app/outputs/flutter-apk/app-debug.apk`. Gradle emitted Java native-access and SDK XML version warnings. The APK was not installed.
+
+### Continuation review — 2026-11-28
+
+- `git status --short --branch` showed `main...origin/main` and existing modifications to six documentation files, the PDF export service, `pubspec.yaml`, two tests, plus untracked `assets/` and `test/pdf_japanese_export_test.dart`. These pre-existing changes were preserved.
+- Inspected the PDF implementation and its isolated-database test: the export loads the bundled Japanese font and defaults to excluding private records. Earlier Android PDF/navigation results are recorded below; they are not new device verification.
+- `cmd.exe /c "flutter.bat test test/pdf_japanese_export_test.dart"`: 1 test passed; it checks PDF Unicode text and private-goal exclusion/inclusion in an in-memory database. It does not independently verify visual glyph rendering.
+- The next bounded task remains owner review and explicit Milestone 7 acceptance. No new feature, migration, production-data change, installation, commit or release was performed.
+
+### Isolated Android verification retry
+
+- `adb devices -l` detected Android 16 `2510DRA23E` (`i7xsrs7hvgbqgyln`). A newly created disposable Flutter app used `dev.hibi.pdfverify.hibi_pdf_verify`, with the original service, the same bundled font, in-memory database and `TEMP`/`TMP` on D:.
+- `flutter.bat test integration_test/pdf_probe_test.dart -d i7xsrs7hvgbqgyln`: built and installed the isolated app, then passed one test checking Japanese date and public habit/goal text plus private-goal exclusion and explicit inclusion via PDF Unicode mappings.
+- `flutter.bat test integration_test/app_test.dart -d i7xsrs7hvgbqgyln`: passed one test navigating all five destinations. This test uses injected security/notification gateways and in-memory storage; it does not verify platform biometrics or alter the owner's data.
+- `flutter.bat test --reporter expanded integration_test/pdf_probe_test.dart -d i7xsrs7hvgbqgyln` was rerun to capture synthetic PDF bytes. PyMuPDF independently extracted Japanese text and confirmed default privacy versus explicit opt-in; the public PDF was rasterized and visually inspected on the host. `run-as` retrieval after the first run failed because Flutter had already removed the test package.
+- `adb -s i7xsrs7hvgbqgyln shell pm list packages dev.hibi.pdfverify.hibi_pdf_verify` returned no package after testing; disposable project, temporary files and generated PDFs were removed.
+- `com.example.hibi` was not installed, cleared or modified during these tests. Java native-access warning occurred during Gradle builds.
+
+
+### Final verification session
+
+- `cmd.exe /c "flutter.bat devices & adb devices -l"` detected Android 16 `2510DRA23E` (`i7xsrs7hvgbqgyln`).
+- `cmd.exe /c "dart.bat format --output=none --set-exit-if-changed . && flutter.bat analyze && flutter.bat test -j 2"`: format passed (196 files unchanged), analysis passed, but the first full test command timed out after 600 seconds with the last reported count `+294`. The reason for the stall was not established. C: became full during the overlapping Android probe build.
+- Retry: `cmd.exe /c "set TEMP=D:\hibi_test_temp_20261127&& set TMP=D:\hibi_test_temp_20261127&& flutter.bat test -j 2"`: `01:21 +314: All tests passed!`. The existing backup test emitted a Drift multiple-database warning. The disposable D: temp directory was removed.
+- First isolated probe `flutter.bat test integration_test/pdf_probe_test.dart -d i7xsrs7hvgbqgyln` failed during Gradle build because C: was full (`java.io.IOException: There is not enough space on the disk`), before installation. Removed only the disposable probe's build directory and moved the probe to D: for retry. The user's Hibi app and data were not touched.
+- Retry from D: with `TEMP`/`TMP` on D: built the isolated `dev.hibi.pdfverify.hibi_pdf_verify` APK, but installation failed with `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. Flutter's automatic cleanup reported `DELETE_FAILED_INTERNAL_ERROR`. The Android PDF and navigation scenarios did not execute; no device security restriction was bypassed.
+
+
+### Japanese PDF continuation — 2026-11-27
+
+- Preserved the three existing modified documentation files shown by `git status --short` at session start.
+- Bundled Noto Sans JP, SIL OFL 1.1, with license (`assets/fonts/`); `ExportService.exportPdfBytes` loads it offline for Japanese dates and user text. Private records remain excluded by default. Font source: `https://raw.githubusercontent.com/google/fonts/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf`; SHA-256 `c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f`.
+- `cmd.exe /c "dart.bat format lib/features/data_management/data/export_service.dart test/backup_export_test.dart test/milestone7_finalization_test.dart test/pdf_japanese_export_test.dart && flutter.bat analyze && flutter.bat test test/pdf_japanese_export_test.dart test/backup_export_test.dart test/milestone7_finalization_test.dart"`: 4 files unchanged, analysis clean, 10 tests passed. The existing backup test emitted a Drift multiple-database warning.
+- `cmd.exe /c "flutter.bat build apk --debug"`: succeeded, producing `build/app/outputs/flutter-apk/app-debug.apk`; Gradle reported Java native-access and SDK XML version warnings. No APK was installed.
+- Temporary isolated-database PDF smoke test: `cmd.exe /c "flutter.bat test test/_pdf_smoke_test.dart"` passed. PyMuPDF independently extracted the Japanese date, public habit and goal and confirmed a private goal appeared only with explicit opt-in; rasterized output was visually inspected. Temporary test and PDFs were removed.
+- Initial combined tests failed because the backup test lacked Flutter binding initialization; fixed. First format/analyze command then stopped on one unnecessary-import lint; fixed and reran successfully. No existing user data or schema was changed.
+- Full regression and Android-device PDF export were not run this session; prior full-suite and device results below predate this font change. Next: final milestone verification, including Android PDF output on isolated data, before owner acceptance.
+
+
+### Historical continuation verification — 2026-11-27 (superseded above)
+
+- `git status --short; git branch --show-current`: no changed files were reported; branch `main`.
+- `cmd.exe /c "flutter.bat test test/milestone7_finalization_test.dart"`: 7 tests passed; the PDF fallback test printed `Helvetica has no Unicode support`. This run does not establish that Japanese glyphs render in a PDF.
+- `cmd.exe /c "flutter.bat devices"`: Android 16 device `2510DRA23E` (`i7xsrs7hvgbqgyln`) detected. No device test or installation was performed this session.
+- Implementation inspection: the PDF export screen supplies no Unicode font to `ExportService.exportPdfBytes`; its default path replaces unsupported characters and uses an ISO date. Correct Japanese PDF glyph rendering required by R-012 is therefore not verified or implemented in that default path. This remains an acceptance limitation, despite the passing fallback test.
+- No application code, database or user data changed. The next bounded task is to address the R-012 PDF glyph gap and verify actual output before owner acceptance; no later milestone or optional import was started.
+
 
 ## Implemented
 
@@ -564,8 +630,8 @@ Milestone 0 acceptance: Android launch and five navigation destinations visually
 
 ## Limitations
 
-Local `hibi.sqlite` remains **unencrypted at rest** (App Lock protects ordinary unlocked-device UI access only, not database encryption; full SQLCipher at-rest encryption is not enabled). Human-readable JSON, CSV and PDF exports are unencrypted (private records excluded by default with explicit warnings). Built-in PDF generation uses standard Helvetica (ASCII/Latin-1 safe fallback) until an open-source CJK TTF asset (e.g. Noto Sans JP) is bundled and passed via `ExportService.exportPdfBytes(unicodeFont: ...)` for native Japanese glyphs inside PDF files. Local Android reminders use automatic inexact fallback (`inexactAllowWhileIdle`) when exact alarms are unavailable and cannot guarantee delivery under OEM battery optimization or Doze mode. The initial-start action pauses rather than permanently cancels a habit; backdated target/log correction UI is implemented for counter habits only; multiple unlinked legacy counter-correction audit chains remain explicit `conflict` records. Duration habit inline timers on Today exist in screen state (whereas Focus/Pomodoro sessions persist deadline and elapsed state in SQLite). Optional legacy text import (`R-014`) remains explicitly deferred until separately approved. Android `applicationId` remains the `com.example.hibi` development placeholder and release APK signing uses debug keys until the owner supplies a production `applicationId` and `android/key.properties` keystore. `integration_test/app_test.dart` was statically analyzed on host and has not yet been executed on a connected Android device.
+Local `hibi.sqlite` remains **unencrypted at rest** (App Lock protects ordinary unlocked-device UI access only, not database encryption; full SQLCipher at-rest encryption is not enabled). Human-readable JSON, CSV and PDF exports are unencrypted (private records excluded by default with explicit warnings). Local Android reminders use automatic inexact fallback (`inexactAllowWhileIdle`) when exact alarms are unavailable and cannot guarantee delivery under OEM battery optimization or Doze mode. The initial-start action pauses rather than permanently cancels a habit; backdated target/log correction UI is implemented for counter habits only; multiple unlinked legacy counter-correction audit chains remain explicit `conflict` records. Duration habit inline timers on Today exist in screen state (whereas Focus/Pomodoro sessions persist deadline and elapsed state in SQLite). Optional legacy text import (`R-014`) remains explicitly deferred until separately approved. Android `applicationId` remains the `com.example.hibi` development placeholder and release APK signing uses debug keys until the owner supplies a production `applicationId` and `android/key.properties` keystore. `integration_test/app_test.dart` was statically analyzed on host and has not yet been executed on a connected Android device.
 
 ## Next bounded task
 
-Await explicit final owner acceptance of **Milestone 7 — Finalization** (all Milestones 0–7 complete, 313/313 tests passing, debug & release APKs built). Do not commit, push, publish, change `com.example.hibi`, or release without explicit owner permission.
+Request the owner's review and explicit acceptance of Milestone 7. Before distribution, confirm the production application ID and signing key; do not commit, push, publish, change `com.example.hibi`, or release without permission.

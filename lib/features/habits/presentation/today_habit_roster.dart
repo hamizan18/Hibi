@@ -69,7 +69,7 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done &&
             !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Text('Loading habits…');
         }
         if (snapshot.hasError) {
           return Column(
@@ -80,7 +80,7 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Text('Loading habits…');
         }
         final visible = snapshot.data!.where((habit) {
           return _showPrivate ||
@@ -97,16 +97,30 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Show private or unclassified habits'),
-                subtitle: const Text('Only use this in a private place.'),
-                value: _showPrivate,
-                onChanged: (value) => setState(() => _showPrivate = value),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  title: const Text('Show private habits'),
+                  subtitle: const Text(
+                    'Also shows habits with unknown privacy. Use in a private place.',
+                  ),
+                  value: _showPrivate,
+                  onChanged: (value) => setState(() => _showPrivate = value),
+                ),
               ),
               if (visible.isEmpty)
-                const Text(
-                  'No visible habits today. Create one to get started.',
+                const Card(
+                  margin: EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'No habits to show. Add a habit or show private habits.',
+                    ),
+                  ),
                 ),
               for (final habit in visible) _habitCard(habit),
               if (snapshot.connectionState != ConnectionState.done)
@@ -124,22 +138,36 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
     final applicability = habit.applicability.applicability;
     return Card(
       key: ValueKey(habit.habitId),
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant
+              .withValues(alpha: 0.4),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              habit.name ?? 'Unconfigured habit',
-              style: Theme.of(context).textTheme.titleMedium,
+              habit.name ?? 'Habit needs setup',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
+            const SizedBox(height: 8),
             if (applicability == HabitApplicability.unknown)
-              const Text('Status unknown: configuration is incomplete.')
+              const Text('Finish setting up this habit to see its status.')
             else if (habit.applicability.reason ==
                 HabitApplicabilityReason.beforeStart)
-              const Text('Not started yet. You can pause from the start date.')
+              const Text(
+                'This habit has not started yet. You can pause it from its start date.',
+              )
             else if (applicability == HabitApplicability.notApplicable)
-              const Text('Not scheduled or not active today.')
+              const Text('Not scheduled or active today.')
             else
               switch (habit.trackingType) {
                 HabitTrackingType.counter => CounterTodayCard(
@@ -175,58 +203,67 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
                   onChanged: _entrySaved,
                 ),
                 HabitTrackingType.unconfigured => const Text(
-                  'Status unknown: tracking type is not configured.',
+                  'Finish choosing how to track this habit.',
                 ),
               },
-            if (habit.trackingType != HabitTrackingType.unconfigured)
-              CounterLifecycleControls(
-                habit: habit,
-                date: widget.date,
-                onChanged: _lifecycleChanged,
+            if (habit.trackingType != HabitTrackingType.unconfigured) ...[
+              const SizedBox(height: 8),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text('Habit options'),
+                children: [
+                  CounterLifecycleControls(
+                    habit: habit,
+                    date: widget.date,
+                    onChanged: _lifecycleChanged,
+                  ),
+                  if (habit.applicability.lifecycleState ==
+                          HabitLifecycleState.active &&
+                      habit.trackingType == HabitTrackingType.counter)
+                    CounterRecoveryControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                      onChanged: _entrySaved,
+                    ),
+                  if (habit.trackingType == HabitTrackingType.counter) ...[
+                    CounterFutureVersionControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                      onChanged: _lifecycleChanged,
+                    ),
+                    CounterCorrectionControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                      onChanged: _lifecycleChanged,
+                    ),
+                    CounterAuditHistoryControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                    ),
+                  ] else
+                    NonCounterVersionAndAuditControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                      onChanged: _lifecycleChanged,
+                    ),
+                  if (habit.applicability.lifecycleState ==
+                          HabitLifecycleState.active &&
+                      habit.trackingType == HabitTrackingType.checklist)
+                    ChecklistRecoveryControls(
+                      habit: habit,
+                      date: widget.date,
+                      showPrivateHistory: _showPrivate,
+                      onChanged: _entrySaved,
+                    ),
+                ],
               ),
-            if (habit.applicability.lifecycleState ==
-                    HabitLifecycleState.active &&
-                habit.trackingType == HabitTrackingType.counter)
-              CounterRecoveryControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-                onChanged: _entrySaved,
-              ),
-            if (habit.trackingType == HabitTrackingType.counter) ...[
-              CounterFutureVersionControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-                onChanged: _lifecycleChanged,
-              ),
-              CounterCorrectionControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-                onChanged: _lifecycleChanged,
-              ),
-              CounterAuditHistoryControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-              ),
-            ] else if (habit.trackingType != HabitTrackingType.unconfigured)
-              NonCounterVersionAndAuditControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-                onChanged: _lifecycleChanged,
-              ),
-            if (habit.applicability.lifecycleState ==
-                    HabitLifecycleState.active &&
-                habit.trackingType == HabitTrackingType.checklist)
-              ChecklistRecoveryControls(
-                habit: habit,
-                date: widget.date,
-                showPrivateHistory: _showPrivate,
-                onChanged: _entrySaved,
-              ),
+            ],
           ],
         ),
       ),

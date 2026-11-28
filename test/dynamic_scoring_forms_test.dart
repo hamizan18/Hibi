@@ -32,6 +32,7 @@ void main() {
         find.widgetWithText(TextFormField, 'Name'),
         'Test habit',
       );
+      await tester.ensureVisible(find.text('Counter').first);
       await tester.tap(find.text('Counter').first);
       await tester.pumpAndSettle();
       await tester.tap(find.text(type).last);

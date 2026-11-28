@@ -30,6 +30,7 @@ class _Clock implements AppClock {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('BackupRestoreService & ExportService', () {
     test('encrypted backup round-trips cleanly, rejects tampered/wrong-passphrase backups without harming existing data, and excludes private records from default JSON/CSV/PDF exports', () async {
       final db = AppDatabase(NativeDatabase.memory());

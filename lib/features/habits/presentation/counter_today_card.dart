@@ -173,7 +173,7 @@ class _CounterTodayCardState extends ConsumerState<CounterTodayCard> {
     final label = switch (status) {
       CounterDayEffectiveStatus.notApplicable => 'Not applicable',
       CounterDayEffectiveStatus.unknown => 'Unknown',
-      CounterDayEffectiveStatus.pending => 'Pending',
+      CounterDayEffectiveStatus.pending => 'Not started',
       CounterDayEffectiveStatus.partial => 'In progress',
       CounterDayEffectiveStatus.completed => 'Completed',
       CounterDayEffectiveStatus.failed => 'Failed',
@@ -202,14 +202,14 @@ class _CounterTodayCardState extends ConsumerState<CounterTodayCard> {
         if (!_loading && evaluation == null)
           TextButton(
             onPressed: _busy ? null : _load,
-            child: const Text('Reload'),
+            child: const Text('Try again'),
           ),
         TextField(
           controller: _quantity,
           enabled: canAct,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(labelText: 'Progress amount'),
+          decoration: const InputDecoration(labelText: 'Amount to add'),
         ),
         Wrap(
           spacing: 8,
@@ -222,13 +222,13 @@ class _CounterTodayCardState extends ConsumerState<CounterTodayCard> {
               onPressed: canAct
                   ? () => _submit(resolution: CounterResolutionState.failed)
                   : null,
-              child: const Text('Mark failed'),
+              child: const Text('Mark as not done'),
             ),
             TextButton(
               onPressed: canAct
                   ? () => _submit(resolution: CounterResolutionState.excused)
                   : null,
-              child: const Text('Excuse'),
+              child: const Text('Excuse today'),
             ),
           ],
         ),

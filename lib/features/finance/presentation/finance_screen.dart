@@ -418,7 +418,10 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done &&
             !snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Text('Loading finances…'),
+          );
         }
         if (snapshot.hasError || !snapshot.hasData) {
           return Column(

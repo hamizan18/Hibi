@@ -130,16 +130,16 @@ void main() {
           onChanged: () => changes++,
         ),
       );
-      expect(find.text('Status: Pending'), findsOneWidget);
+      expect(find.text('Status: Not recorded yet'), findsOneWidget);
       expect(await count(db, 'habit_avoidance_occurrences'), 0);
-      await tapText(tester, 'Record incident');
-      await tapText(tester, 'Record incident');
+      await tapText(tester, 'Record an incident');
+      await tapText(tester, 'Record an incident');
       expect(find.text('Incidents: 2'), findsOneWidget);
       expect(find.text('Status: Pending'), findsOneWidget);
       expect(await count(db, 'habit_avoidance_resolutions'), 0);
-      await tapText(tester, 'Confirm completion');
+      await tapText(tester, 'Confirm done');
       expect(find.text('Status: Completed'), findsOneWidget);
-      await tapText(tester, 'Record incident');
+      await tapText(tester, 'Record an incident');
       expect(find.text('Incidents: 3'), findsOneWidget);
       expect(find.text('Status: Failed'), findsOneWidget);
       expect(await count(db, 'habit_avoidance_incidents'), 3);

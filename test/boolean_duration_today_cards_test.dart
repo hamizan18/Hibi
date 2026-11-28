@@ -44,9 +44,9 @@ Future<void> showCard(
 
 void main() {
   for (final entry in <(String, BooleanLogState)>[
-    ('Complete', BooleanLogState.completed),
-    ('Fail', BooleanLogState.failed),
-    ('Excuse', BooleanLogState.excused),
+    ('Mark done', BooleanLogState.completed),
+    ('Mark not done', BooleanLogState.failed),
+    ('Excuse today', BooleanLogState.excused),
   ]) {
     testWidgets('Boolean ${entry.$2.name} is explicit and cannot be repeated', (
       tester,
@@ -73,7 +73,7 @@ void main() {
         clock,
         BooleanTodayCard(habit: habit, date: date, onChanged: () => changes++),
       );
-      expect(find.text('Pending'), findsOneWidget);
+      expect(find.text('Not recorded yet'), findsOneWidget);
       expect(await count(db, 'habit_typed_occurrences'), 0);
       expect(await count(db, 'habit_typed_logs'), 0);
       await tester.tap(find.text(entry.$1));
@@ -121,7 +121,7 @@ void main() {
       expect(find.text('pending: 0 / 60 seconds'), findsOneWidget);
       expect(await count(db, 'habit_typed_occurrences'), 0);
       await tester.enterText(find.byType(TextField), '0');
-      await tester.tap(find.text('Add duration'));
+      await tester.tap(find.text('Add time'));
       await tester.pumpAndSettle();
       expect(
         find.text('Enter a positive whole number of seconds.'),
@@ -129,7 +129,7 @@ void main() {
       );
       expect(await count(db, 'habit_duration_events'), 0);
       await tester.enterText(find.byType(TextField), '20');
-      await tester.tap(find.text('Add duration'));
+      await tester.tap(find.text('Add time'));
       await tester.pumpAndSettle();
       expect(find.text('partial: 20 / 60 seconds'), findsOneWidget);
       await tester.tap(find.text('Start timer'));

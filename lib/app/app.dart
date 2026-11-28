@@ -34,7 +34,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
       for (var i = 0; i < _destinations.length; i++)
         GoRoute(
           path: _destinations[i].path,
-          builder: (context, state) => _FoundationScreen(index: i),
+          pageBuilder: (context, state) => NoTransitionPage<void>(
+            key: state.pageKey,
+            child: _FoundationScreen(index: i),
+          ),
         ),
       GoRoute(
         path: '/habit-builder',
@@ -133,7 +136,7 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
       appBar: AppBar(title: Text(destination.label)),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             if (widget.index == 0) ...[
               Text(
@@ -153,34 +156,67 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.index == 0
-                          ? 'Welcome to Hibi'
-                          : widget.index == 1
-                          ? 'History & Analytics'
-                          : widget.index == 2
-                          ? 'Finance (IDR)'
-                          : widget.index == 3
-                          ? 'Journal, Goals & Focus'
-                          : 'More',
-                      style: Theme.of(context).textTheme.titleLarge,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary
+                                .withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            widget.index == 0
+                                ? Icons.spa_outlined
+                                : destination.icon,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            widget.index == 0
+                                ? 'Welcome to Hibi'
+                                : widget.index == 1
+                                ? 'History & Analytics'
+                                : widget.index == 2
+                                ? 'Finance (IDR)'
+                                : widget.index == 3
+                                ? 'Journal, Goals & Focus'
+                                : 'More',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       widget.index == 0
-                          ? 'Your habits stay on this device.'
+                          ? 'Take today one step at a time. Your habits stay on this device.'
                           : widget.index == 1
-                          ? 'Deterministic calendar, weighted score, recording coverage, heatmaps, streaks and reports.'
+                          ? 'Look back at your habits and see your progress over time.'
                           : widget.index == 2
-                          ? 'Integer IDR wallets, transactions, atomic transfers, expense budgets and audited reports.'
+                          ? 'Keep track of your money, spending and budgets.'
                           : widget.index == 3
-                          ? 'Optional journal and mood, goals with milestones, restart-safe focus sessions, and opt-in XP rewards.'
-                          : 'Habit Builder, App Lock & Privacy, Local Reminders, Encrypted Backup/Restore and Exports. Optional legacy import is not enabled.',
+                          ? 'Make space for your thoughts, goals and focus.'
+                          : 'Manage your habits, privacy, reminders and files.',
                     ),
                   ],
                 ),
               ),
             ),
+            if (widget.index == 0 || widget.index == 4) ...[
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () async {
+                  await context.push('/habit-builder');
+                  if (mounted) setState(() => _rosterRevision++);
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Create habit'),
+              ),
+            ],
             if (widget.index == 0) ...[
               const SizedBox(height: 16),
               TodayHabitRoster(
@@ -207,17 +243,6 @@ class _FoundationScreenState extends ConsumerState<_FoundationScreen>
               GrowthView(
                 key: ValueKey(_rosterRevision),
                 asOfDate: LocalDate(_now.year, _now.month, _now.day),
-              ),
-            ],
-            if (widget.index == 0 || widget.index == 4) ...[
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () async {
-                  await context.push('/habit-builder');
-                  if (mounted) setState(() => _rosterRevision++);
-                },
-                icon: const Icon(Icons.add),
-                label: const Text('Create habit'),
               ),
             ],
             if (widget.index == 4) ...[

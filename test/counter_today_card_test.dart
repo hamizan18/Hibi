@@ -73,7 +73,7 @@ void main() {
     tester,
   ) async {
     await showCard(tester);
-    expect(find.text('Pending'), findsOneWidget);
+    expect(find.text('Not started'), findsOneWidget);
     expect(
       (await CounterDayReader(
         db,
@@ -124,7 +124,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(
           find.text(
-            state == CounterResolutionState.failed ? 'Mark failed' : 'Excuse',
+            state == CounterResolutionState.failed
+                ? 'Mark as not done'
+                : 'Excuse today',
           ),
         );
         await tester.pumpAndSettle();

@@ -43,6 +43,10 @@ void main() {
     expect(find.text('2026年11月26日(木)'), findsOneWidget);
     expect(find.text('Welcome to Hibi'), findsOneWidget);
     await tester.tap(find.text('Growth'));
+    // Tab content switches on the next frame, without a route animation.
+    await tester.pump();
+    expect(find.text('Welcome to Hibi'), findsNothing);
+    expect(find.text('Journal, Goals & Focus'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.text('Journal, Goals & Focus'), findsOneWidget);
     await tester.tap(find.text('More'));

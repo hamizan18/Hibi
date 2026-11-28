@@ -150,7 +150,7 @@ class _ChecklistTodayCardState extends ConsumerState<ChecklistTodayCard> {
         if (_loading) const CircularProgressIndicator(),
         if (_error != null) Text(_error!),
         if (!_loading && _items == null)
-          TextButton(onPressed: _load, child: const Text('Retry')),
+          TextButton(onPressed: _load, child: const Text('Try again')),
         if (!_loading && _items != null)
           for (final item in _items!)
             Column(
@@ -306,13 +306,13 @@ class _AvoidanceTodayCardState extends ConsumerState<AvoidanceTodayCard> {
         if (_loading) const CircularProgressIndicator(),
         if (_error != null) Text(_error!),
         if (!_loading && day == null)
-          TextButton(onPressed: _load, child: const Text('Retry')),
+          TextButton(onPressed: _load, child: const Text('Try again')),
         if (!_loading && day != null) ...[
           Text(
             'Status: ${_confirmationConflict && progress?.status != AvoidanceEffectiveStatus.failed
                 ? 'Conflict'
                 : progress == null
-                ? 'Pending'
+                ? 'Not recorded yet'
                 : _label(progress.status.name)}',
           ),
           if (_confirmationConflict)
@@ -325,7 +325,7 @@ class _AvoidanceTodayCardState extends ConsumerState<AvoidanceTodayCard> {
                 onPressed: !_saving && today
                     ? () => _write(incident: true)
                     : null,
-                child: const Text('Record incident'),
+                child: const Text('Record an incident'),
               ),
               OutlinedButton(
                 onPressed:
@@ -335,7 +335,7 @@ class _AvoidanceTodayCardState extends ConsumerState<AvoidanceTodayCard> {
                         progress?.status != AvoidanceEffectiveStatus.failed
                     ? () => _write(incident: false)
                     : null,
-                child: const Text('Confirm completion'),
+                child: const Text('Confirm done'),
               ),
             ],
           ),

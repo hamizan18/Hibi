@@ -172,7 +172,7 @@ class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
               DropdownButtonFormField<int>(
                 initialValue: _dayOffset,
                 decoration: const InputDecoration(
-                  labelText: 'Time relative to occurrence date',
+                  labelText: 'Which day was this time?',
                 ),
                 items: const [
                   DropdownMenuItem(value: -1, child: Text('Previous day')),
@@ -185,7 +185,7 @@ class _NumericTodayCardState extends ConsumerState<NumericTodayCard> {
               ),
             ElevatedButton(
               onPressed: _submitting ? null : () => _submit(data),
-              child: Text(_submitting ? 'Saving…' : 'Log today'),
+              child: Text(_submitting ? 'Saving…' : 'Save for today'),
             ),
           ] else if (_error != null)
             Text(_error!),

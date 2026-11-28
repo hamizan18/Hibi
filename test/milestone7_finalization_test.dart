@@ -216,32 +216,36 @@ void main() {
         },
       );
 
-      test('PDF export handles Japanese titles safely with built-in Helvetica fallback', () async {
-        final db = AppDatabase(NativeDatabase.memory());
-        addTearDown(db.close);
-        final clock = _MutableClock(DateTime(2026, 11, 27, 9, 0));
-        final today = LocalDate(2026, 11, 27);
+      test(
+        'PDF export produces a document for a Japanese habit title',
+        () async {
+          final db = AppDatabase(NativeDatabase.memory());
+          addTearDown(db.close);
+          final clock = _MutableClock(DateTime(2026, 11, 27, 9, 0));
+          final today = LocalDate(2026, 11, 27);
 
-        await CounterHabitWriter(db, clock).create(
-          habitId: 'h_jp',
-          versionId: 'v_jp',
-          lifecycleEventId: 'l_jp',
-          auditId: 'a_jp',
-          name: 'Hibi 日々 Reading',
-          effectiveDate: DateTime(2026, 11, 27),
-          target: CounterTarget(count: 5, unit: 'pages'),
-          schedule: DailySchedule(start: today),
-        );
-        await HabitMetadataStore(db)
-            .insert('v_jp', HabitMetadata(category: 'Daily', isPrivate: false));
+          await CounterHabitWriter(db, clock).create(
+            habitId: 'h_jp',
+            versionId: 'v_jp',
+            lifecycleEventId: 'l_jp',
+            auditId: 'a_jp',
+            name: 'Hibi 日々 Reading',
+            effectiveDate: DateTime(2026, 11, 27),
+            target: CounterTarget(count: 5, unit: 'pages'),
+            schedule: DailySchedule(start: today),
+          );
+          await HabitMetadataStore(
+            db,
+          ).insert('v_jp', HabitMetadata(category: 'Daily', isPrivate: false));
 
-        final bytes = await ExportService(
-          db,
-          clock,
-        ).exportPdfBytes(asOfDate: today);
-        expect(bytes.length, greaterThan(500));
-        expect(utf8.decode(bytes.sublist(0, 5)), '%PDF-');
-      });
+          final bytes = await ExportService(
+            db,
+            clock,
+          ).exportPdfBytes(asOfDate: today);
+          expect(bytes.length, greaterThan(500));
+          expect(utf8.decode(bytes.sublist(0, 5)), '%PDF-');
+        },
+      );
     },
   );
 
