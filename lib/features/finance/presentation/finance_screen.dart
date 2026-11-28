@@ -564,11 +564,13 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
               child: Text(_showWalletForm ? 'Cancel wallet' : 'Add wallet'),
             ),
             if (_showWalletForm) ...[
+              const SizedBox(height: 8),
               TextField(
                 controller: _walletName,
                 enabled: !_busy,
                 decoration: const InputDecoration(labelText: 'Wallet name'),
               ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _walletOpening,
                 enabled: !_busy,
@@ -619,11 +621,13 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
               ),
             ),
             if (_showCategoryForm) ...[
+              const SizedBox(height: 8),
               TextField(
                 controller: _categoryName,
                 enabled: !_busy,
                 decoration: const InputDecoration(labelText: 'Category name'),
               ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<FinanceCategoryKind>(
                 initialValue: _categoryKind,
                 isExpanded: true,
@@ -714,6 +718,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
               ),
             ),
             if (_showTxForm && activeWallets.isNotEmpty) ...[
+              const SizedBox(height: 8),
               DropdownButtonFormField<FinanceTransactionType>(
                 initialValue: _txType,
                 isExpanded: true,
@@ -737,6 +742,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                         _txCategoryId = null;
                       }),
               ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String?>(
                 key: ValueKey(('tx_wallet', validWallet)),
                 initialValue: validWallet,
@@ -756,6 +762,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                     ? null
                     : (v) => setState(() => _txWalletId = v),
               ),
+              const SizedBox(height: 16),
               if (matchingCategories.isEmpty)
                 Text('Create an ${_txType.name} category first.')
               else
@@ -775,12 +782,14 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                       ? null
                       : (v) => setState(() => _txCategoryId = v),
                 ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _txAmount,
                 enabled: !_busy,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(labelText: 'Amount (IDR)'),
               ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _txNote,
                 enabled: !_busy,
@@ -846,6 +855,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
               ),
             ),
             if (_showTransferForm && activeWallets.length >= 2) ...[
+              const SizedBox(height: 8),
               DropdownButtonFormField<String?>(
                 key: ValueKey(('tr_from', validFrom)),
                 initialValue: validFrom,
@@ -865,6 +875,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                     ? null
                     : (v) => setState(() => _transferFromId = v),
               ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String?>(
                 key: ValueKey(('tr_to', validTo)),
                 initialValue: validTo,
@@ -884,6 +895,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                     ? null
                     : (v) => setState(() => _transferToId = v),
               ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _transferAmount,
                 enabled: !_busy,
@@ -892,6 +904,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                   labelText: 'Transfer amount (IDR)',
                 ),
               ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _transferNote,
                 enabled: !_busy,
@@ -952,6 +965,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
               child: Text(_showBudgetForm ? 'Cancel budget' : 'Add budget'),
             ),
             if (_showBudgetForm && expenseCategories.isNotEmpty) ...[
+              const SizedBox(height: 8),
               DropdownButtonFormField<String?>(
                 key: ValueKey(('budget_cat', validCat)),
                 initialValue: validCat,
@@ -970,6 +984,7 @@ class _FinanceViewState extends ConsumerState<FinanceView> {
                     ? null
                     : (v) => setState(() => _budgetCategoryId = v),
               ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _budgetLimit,
                 enabled: !_busy,
@@ -1049,10 +1064,12 @@ class _EditTransactionDialogState extends State<_EditTransactionDialog> {
               labelText: 'Updated amount (IDR)',
             ),
           ),
+          const SizedBox(height: 16),
           TextField(
             controller: _noteCtrl,
             decoration: const InputDecoration(labelText: 'Updated note'),
           ),
+          const SizedBox(height: 16),
           TextField(
             controller: _reasonCtrl,
             decoration: const InputDecoration(

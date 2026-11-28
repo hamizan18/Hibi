@@ -4,6 +4,12 @@
 
 **Milestone 0 through Milestone 6 are accepted by the owner. Milestone 7 — Finalization remains active pending owner acceptance.** Japanese PDF content and five-tab navigation passed on Android in an isolated test application; production app installation was not changed. Do not commit, push, publish or release without explicit owner permission.
 
+## Habit Builder spacing and switches — 2026-11-28
+
+- Builder fields now have larger gaps, the scrollable form respects the bottom system safe area, and its preference labels no longer toggle values; the switches remain labeled for assistive technology. Privacy copy now distinguishes optional App Lock from unencrypted SQLite.
+- `flutter.bat test --no-pub test/habit_builder_screen_test.dart test/dynamic_scoring_forms_test.dart`: 10 tests passed after fixing an initial unsupported `Switch.semanticLabel` compile error. Exact commands and results are in PROGRESS.md. The user requested a guided first-use simulation using existing optional templates; do not create test records in their production database.
+- The debug APK built successfully at `build/app/outputs/flutter-apk/app-debug.apk` (Java native-access warning), without installation. A host preview with a simulated bottom inset was inspected but timed out after writing its screenshot; it does not prove Android navigation-bar behavior. Next: safely install on a test device and verify spacing, bottom navigation clearance, and switch-only interaction.
+
 ## Navigation and builder refresh — 2026-11-28
 
 - Tab routes now switch without a route animation. Each screen still performs its local reads on entry, with a short text loading state when necessary; no stale or fabricated cache was introduced.

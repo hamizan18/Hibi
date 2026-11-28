@@ -4,6 +4,14 @@
 
 Milestone 0 through Milestone 6 are accepted by the owner. **Milestone 7 (Finalization)** remains active pending owner acceptance. The Japanese PDF and five-tab navigation were tested on Android in an isolated application; production app installation was not changed. Do not commit, push, publish or release without explicit owner permission.
 
+### Habit Builder spacing and switches — 2026-11-28
+
+- Increased vertical spacing between builder fields, applied a bottom system safe area, and made builder preference labels non-interactive while keeping labeled accessible switches. Updated the privacy explanation to describe the current App Lock and unencrypted-database limitations.
+- First targeted run failed to compile because `Switch` does not accept `semanticLabel` in this Flutter SDK. Replaced it with a `Semantics` wrapper and updated the test finder. `dart.bat format lib/features/habits/presentation/habit_builder_screen.dart test/habit_builder_screen_test.dart` then reported 2 files unchanged; `flutter.bat test --no-pub test/habit_builder_screen_test.dart test/dynamic_scoring_forms_test.dart` passed all 10 tests with `TEMP`/`TMP` on `D:\hibi_ui_temp`.
+- The added widget tests check field separation, an 80-pixel system inset, and that pressing the private label leaves its switch unchanged while pressing the switch changes it. No live user records were created.
+- A temporary host widget preview with a simulated 80-pixel bottom inset was inspected: preference fields, switches and Create habit were visible with separation. The screenshot used a host font and no real Android navigation bar; the preview command `flutter.bat test --no-pub test/_builder_layout_preview_test.dart` timed out after 60 seconds despite writing the screenshot. The temporary test and image were removed. Device visual verification remains outstanding.
+- `cmd.exe /c "set TEMP=D:\hibi_ui_temp&& set TMP=D:\hibi_ui_temp&& flutter.bat build apk --debug --no-pub"`: built `build/app/outputs/flutter-apk/app-debug.apk`; Gradle reported a Java native-access warning. No installation was performed.
+
 ### Navigation and builder refresh — 2026-11-28
 
 - Replaced the tab route animation with `NoTransitionPage`, keeping tab contents freshly loaded from local storage rather than caching potentially stale or private records. The initial data read can still take time; tab loading uses a small text message instead of a central spinner, and errors remain visible.

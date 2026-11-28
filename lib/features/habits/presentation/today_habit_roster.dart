@@ -16,6 +16,7 @@ import 'counter_recovery_controls.dart';
 import 'counter_today_card.dart';
 import 'non_counter_version_audit_controls.dart';
 import 'numeric_today_cards.dart';
+import 'today_habit_insights.dart';
 
 /// A read-only roster. Opening this widget never creates an occurrence.
 class TodayHabitRoster extends ConsumerStatefulWidget {
@@ -30,6 +31,7 @@ class TodayHabitRoster extends ConsumerStatefulWidget {
 class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
   late Future<List<UnifiedHabitSummary>> _roster;
   bool _showPrivate = false;
+  int _insightsRevision = 0;
 
   @override
   void initState() {
@@ -52,6 +54,7 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
   void _refresh() => setState(_load);
 
   void _entrySaved() {
+    setState(() => _insightsRevision++);
     ScaffoldMessenger.maybeOf(context)
       ?..hideCurrentSnackBar()
       ..showSnackBar(const SnackBar(content: Text('Entry saved')));
@@ -112,6 +115,11 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
                   onChanged: (value) => setState(() => _showPrivate = value),
                 ),
               ),
+              TodayHabitInsights(
+                date: widget.date,
+                includePrivate: _showPrivate,
+                revision: _insightsRevision,
+              ),
               if (visible.isEmpty)
                 const Card(
                   margin: EdgeInsets.only(bottom: 12),
@@ -148,16 +156,20 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
               .withValues(alpha: 0.4),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      child: ExpansionTile(
+        maintainState: true,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Text(
+          habit.name ?? 'Habit needs setup',
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: const Text('View progress and actions'),
+        children: [
+          Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              habit.name ?? 'Habit needs setup',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
-            ),
             const SizedBox(height: 8),
             if (applicability == HabitApplicability.unknown)
               const Text('Finish setting up this habit to see its status.')
@@ -266,6 +278,7 @@ class _TodayHabitRosterState extends ConsumerState<TodayHabitRoster> {
             ],
           ],
         ),
+        ],
       ),
     );
   }

@@ -18,6 +18,61 @@ class _TestClock implements AppClock {
 }
 
 void main() {
+  testWidgets('Wallet form keeps outlined fields separated at large text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          appClockProvider.overrideWithValue(_TestClock()),
+        ],
+        child: MaterialApp(
+          theme: ThemeData(
+            inputDecorationTheme: const InputDecorationTheme(
+              border: OutlineInputBorder(),
+            ),
+          ),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(2),
+            ),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: FinanceView(asOfDate: LocalDate(2026, 11, 26)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Add wallet'));
+    await tester.tap(find.text('Add wallet'));
+    await tester.pumpAndSettle();
+
+    final name = find.widgetWithText(TextField, 'Wallet name');
+    final opening = find.widgetWithText(
+      TextField,
+      'Opening balance (integer IDR)',
+    );
+    await tester.enterText(name, 'Cash');
+    await tester.ensureVisible(opening);
+    await tester.tap(opening);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(opening).dy - tester.getBottomLeft(name).dy, 16);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'FinanceView creates wallets, categories, transactions, transfers, budgets and reflects audited edits',
     (tester) async {
